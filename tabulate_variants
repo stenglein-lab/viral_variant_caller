@@ -1,0 +1,95 @@
+#!/usr/bin/perl
+
+# This script creates a matrix of variants and their frequencies from a series
+# of output files from the analyze_variants script in this directory
+#
+# see that script for more information
+#
+# Mark Stenglein 3/27/2017
+
+
+use strict;
+
+my $usage = <<USAGE;
+
+  This script creates a matrix of variants and their frequencies from a series
+  of output files from the analyze_variants script in this directory
+ 
+  see that script for more information
+ 
+  Mark Stenglein 3/27/2017
+
+  $0 variant_tsv_files_from_analyze_variants
+
+USAGE
+
+my %variants = ();
+my @files = ();
+
+while (my $file = shift)
+{
+	warn "file: $file\n";
+   open (my $fh, "<", $file) or die ($!);
+   push @files, $file;
+   process_file($file, $fh);
+}
+
+sub process_file
+{
+   my $filename = shift @_; 
+   my $fh = shift @_; 
+   while (<$fh>)
+   {
+      chomp;
+      my @fields = split "\t";
+      my ($cds_hit,$ref_aa,$codon_number,$alt_aa,$N_or_S,$position,$position_in_cds,$ref_codon,$alt_codon,$ref,$alt,$variant_fraction) = @fields;
+      # just store everything
+      # uniquely identify variant
+      my $variant_key = $position.$ref.$alt;
+      $variants{$variant_key}{$filename} = \@fields;
+   }
+}
+
+# header row
+print "position\tcds\tref_aa\tcodon_number\talt_aa\tN_or_S";
+foreach my $file (@files)
+{
+   my $base_file = $file;
+   $base_file =~ s/_variant_alleles.txt//;
+   print "\t$base_file";
+}
+print "\n";
+
+my @variants = sort { $a <=> $b } keys %variants;
+foreach my $variant (@variants)
+{
+   ## warn "VAR: $variant\n";
+   my $found_info = 0;
+   foreach my $file (@files)
+   {
+      if (!$found_info)
+      {
+         if (defined $variants{$variant}{$file})
+         {
+            my @fields = @{$variants{$variant}{$file}};
+            my ($cds_hit,$ref_aa,$codon_number,$alt_aa,$N_or_S,$position,$position_in_cds,$ref_codon,$alt_codon,$ref,$alt,$variant_fraction) = @fields;
+            print "$position\t$cds_hit\t$ref_aa\t$codon_number\t$alt_aa\t$N_or_S";
+            $found_info = 1;
+         }
+      }
+   }
+   foreach my $file (@files)
+   {
+      if (defined $variants{$variant}{$file})
+      {
+         my @fields = @{$variants{$variant}{$file}};
+         my ($cds_hit,$ref_aa,$codon_number,$alt_aa,$N_or_S,$position,$position_in_cds,$ref_codon,$alt_codon,$ref,$alt,$variant_fraction) = @fields;
+         print "\t$variant_fraction";
+      }
+      else
+      {
+         print "\t";
+      }
+   }
+   print "\n";
+}
