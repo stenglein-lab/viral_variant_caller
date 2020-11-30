@@ -25,7 +25,7 @@ if (!interactive()) {
 } else {
   # for troubleshooting via RStudio interface
   r_bindir <- "."
-  vcfs = list.files(path = "vcfs", pattern = "*.vcf", full.names = T)
+  vcfs = list.files(path = "results", pattern = "*.vcf", full.names = T)
 }
 
 
@@ -41,13 +41,13 @@ df <- lapply(vcfs, "parse_vcf")
 df <- do.call("rbind", df)
 
 # extract dataset ID from vcf name 
-df <- df %>% mutate(dataset_id = str_replace(vcf_name, "vcfs/", "") )
+df <- df %>% mutate(dataset_id = str_replace(vcf_name, "results/", "") )
 df <- df %>% mutate(dataset_id = str_replace(dataset_id, ".wa1.bam.indel.vcf", ""))
 
 # read in metadata 
-metadata <- read_excel("Metadata.xlsx")
-df <- left_join(df, metadata, by="dataset_id")
-?left_join
+# metadata <- read_excel("Metadata.xlsx")
+# df <- left_join(df, metadata, by="dataset_id")
+# ?left_join
 
 
 # are these indels insertions or a deletion?
@@ -62,6 +62,12 @@ df <- df %>% mutate(vcf_type =
 min_allele_freq = 0.03
 df <- df %>% filter(allele_freq >= min_allele_freq)
 
+?as.numeric
+# make sure numeric info is numeric
+df$POS <- as.numeric(as.character(df$POS))
+df$allele_freq <- as.numeric(as.character(df$allele_freq))
+df$depth <- as.numeric(as.character(df$depth))
+
 # get DNA sequence and also gff file
 # dna <- ape::read.dna("viral_refseq/wa1.fasta", format = "fasta")
 # gff <- read.table("viral_refseq/wa1.gff.nofasta", sep="\t", quote="")
@@ -71,13 +77,36 @@ df <- df %>% filter(allele_freq >= min_allele_freq)
 # df_biomarch <- df %>% filter()
 
 
-df_wide <- df %>% pivot_wider(id_cols = c(CHROM, POS, REF, ALT), names_from=vcf_name, values_from=c(allele_freq, depth))
+df_wide <- df %>% pivot_wider(id_cols = c(CHROM, POS, REF, ALT), 
+                              names_from=dataset_id, 
+                              #values_from=c(allele_freq, depth),
+                              values_from=c(allele_freq, depth),
+                              names_sort = T)
 
-df_wide <- df_wide %>% arrange(POS)
+# remove allele_freq_ from column names
+colnames(df_wide) <- str_replace(colnames(df_wide), "allele_freq_", "")
+colnames(df_wide) <- str_replace(colnames(df_wide), "CHROM", "Reference_sequence")
+colnames(df_wide) <- str_replace(colnames(df_wide), "POS", "Position")
+colnames(df_wide) <- str_replace(colnames(df_wide), "REF", "Reference_base(s)")
+colnames(df_wide) <- str_replace(colnames(df_wide), "ALT", "Variant_base(s)")
+
+
+?pivot_wider
+df_wide <- df_wide %>% arrange(Position)
 
 wb <- createWorkbook("Structural_variant_summary.xlsx")
 addWorksheet(wb, "structural_variants")
-writeData(wb, "structural_variants", df_wide)
+writeData(wb, "structural_variants", df_wide,borders="all")
+?writeData
 saveWorkbook(wb, "Structural_variant_summary.xlsx", overwrite = TRUE)
 
 
+
+# how do replicates look?
+# df <- df %>% mutate(replicate = str_match(dataset_id,"(*)_Rep([1-9])")[,2])
+      # df %>% mutate(replicate = str_match(dataset_id,"(\\*)_Rep([1-9])")[,2])
+      # df %>% mutate(dataset)
+
+# df %>% group_by(CHROM, POS, REF, ALT, )
+
+ggplot(df) + geom

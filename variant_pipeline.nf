@@ -19,6 +19,7 @@ params.outdir = "results"
 
 
 params.maxForks_lowmem = "16"
+params.maxForks_mediummem = "16"
 params.maxForks_highmem = "4"
 
 // ------------------
@@ -495,7 +496,7 @@ process tabulate_depth_one {
  Call SNVs using lofreq
 */
 process call_snvs {
-  maxForks params.maxForks_highmem
+  maxForks params.maxForks_mediummem
   publishDir "${params.outdir}", mode:'link'
 
   input:
@@ -561,7 +562,7 @@ process tabulate_snvs {
  Call Indels also using lofreq
 */
 process call_indels {
-  maxForks params.maxForks_highmem
+  maxForks params.maxForks_mediummem
   publishDir "${params.outdir}", mode:'link'
 
   input:
@@ -574,8 +575,7 @@ process call_indels {
   '''
   lofreq indelqual --dindel -f !{params.viral_fasta} -o !{input_bam}.indelqual.bam !{input_bam}
 
-  lofreq call --call-indels --only-indels -f !{params.viral_fasta} !{input_bam}.indelqual.bam | \
-  awk '{ print $0 ";" "!{sample_id}"; }' > !{input_bam}.indel.vcf
+  lofreq call --call-indels --only-indels -f !{params.viral_fasta} !{input_bam}.indelqual.bam > !{input_bam}.indel.vcf
   '''
 }
 

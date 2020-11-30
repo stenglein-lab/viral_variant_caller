@@ -61,7 +61,7 @@ ggplot(depth_df) +
   # see: https://stackoverflow.com/questions/17521438/geom-rect-and-alpha-does-this-work-with-hard-coded-values
   annotate("rect", xmin=0, xmax=max_position, ymin=1, ymax=min_depth_highlight, alpha=0.05, fill="red") +
   scale_color_manual(values = c("red", "black")) +
-  theme_bw(base_size = 12) +
+  theme_bw(base_size = 8) +
   theme(legend.position = "none",
         strip.text.y = element_text(angle=0)) +
   # facet_grid(nice_dataset_name ~ virus, scales="free_y") +
@@ -70,5 +70,18 @@ ggplot(depth_df) +
   xlab ("position in genome (nt)") +
   ylab (paste0("coverage depth\n", "coverage below ", min_depth_highlight, " in red"))
 
-ggsave("coverage_plot.pdf", units="in", width=6.5, height = 10)
+depth_df
 
+ggsave("coverage_plot.pdf", units="in", width=10, height = 6.5)
+
+ggplot(depth_df) +
+  geom_boxplot(aes(x=dataset, y=depth)) +
+  # annotate("rect", xmin=0, xmax=max_position, ymin=1, ymax=min_depth_highlight, alpha=0.05, fill="red") +
+  # scale_color_manual(values = c("red", "black")) +
+  theme_bw(base_size = 8) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  ggtitle("Even high median coverage across datasets\n2020-11-27") +
+  scale_y_log10() +
+  ylab (paste0("boxplots of coverage depth\nat all genome positions in indicated datasets"))
+
+ggsave("coverage_plot_2.pdf", units="in", width=10, height = 6.5)
