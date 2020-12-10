@@ -101,12 +101,3 @@ writeData(wb, "structural_variants", df_wide,borders="all")
 saveWorkbook(wb, "Structural_variant_summary.xlsx", overwrite = TRUE)
 
 
-
-# how do replicates look?
-# df <- df %>% mutate(replicate = str_match(dataset_id,"(*)_Rep([1-9])")[,2])
-      # df %>% mutate(replicate = str_match(dataset_id,"(\\*)_Rep([1-9])")[,2])
-      # df %>% mutate(dataset)
-
-# df %>% group_by(CHROM, POS, REF, ALT, )
-
-ggplot(df) + geom

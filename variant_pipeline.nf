@@ -18,10 +18,6 @@ params.post_trim_fastqc_dir = "$baseDir/post_trim_fastqc/"
 params.outdir = "results"                                                       
 
 
-params.maxForks_lowmem = "16"
-params.maxForks_mediummem = "16"
-params.maxForks_highmem = "4"
-
 // ------------------
 // Trimming settings
 // ------------------
@@ -159,7 +155,7 @@ process setup_indexes {
  Run fastqc on input fastq 
 */
 process initial_qc {
-  maxForks params.maxForks_lowmem
+  label 'lowmem'                                                                
 
   input:
   tuple val(sample_id), path(initial_fastq) from samples_ch_qc
@@ -226,7 +222,7 @@ process write_ids {
 */
 process trim_adapters_and_low_quality {
   // publishDir "${params.outdir}"
-  maxForks params.maxForks_lowmem
+  label 'lowmem'                                                                
 
   input:
   tuple val(sample_id), path(initial_fastq) from samples_ch_trim
@@ -290,7 +286,7 @@ process trim_adapters_and_low_quality {
 /*
 process collapse_to_unique {
   // publishDir "${params.outdir}"
-  maxForks params.maxForks_lowmem
+  label 'lowmem'                                                                
 
   input:
   // post_trim_ch will be empty if params.skip_collapse_to_unique is true,   
@@ -313,7 +309,7 @@ process collapse_to_unique {
  Use fastqc to do QC on post-trimmed fastq
 */
 process post_trim_qc {
-  maxForks params.maxForks_lowmem
+  label 'lowmem'
 
   input:
   tuple val(sample_id), path(input_fastq) from post_trim_qc_ch
@@ -353,7 +349,7 @@ process post_trim_multiqc {
 // TODO: switch to bwa for host filtering too?
 process host_filtering {
   // publishDir "${params.outdir}", pattern: "*_R1_fh.fastq"
-  maxForks params.maxForks_highmem
+  label 'highmem'                                                                
 
   input:
   tuple val(sample_id), path(input_fastq) from post_trim_ch
@@ -396,7 +392,7 @@ Collect and compress all host-filtered fastq files --> deliverables
  output to bam
 */
 process bwa_align_to_refseq {
-  maxForks params.maxForks_lowmem
+  label 'lowmem'                                                                
 
   input:
   tuple val(sample_id), path(input_fastq) from post_host_ch_variants
@@ -443,7 +439,7 @@ process bwa_align_to_refseq {
  see: https://csb5.github.io/lofreq/commands/
 */
 process apply_bsqr {
-  maxForks params.maxForks_lowmem
+  label 'lowmem'                                                                
   publishDir "${params.outdir}", pattern: "*.bam"
 
   input:
@@ -476,7 +472,7 @@ process apply_bsqr {
  Tabulate depth of coverage over refseq
 */
 process tabulate_depth_one {
-  maxForks params.maxForks_lowmem
+  label 'lowmem'
 
   input:
   tuple val(sample_id), path(input_bam) from post_bsqr_depth_ch
@@ -496,7 +492,7 @@ process tabulate_depth_one {
  Call SNVs using lofreq
 */
 process call_snvs {
-  maxForks params.maxForks_mediummem
+  label 'lowmem'
   publishDir "${params.outdir}", mode:'link'
 
   input:
@@ -562,7 +558,7 @@ process tabulate_snvs {
  Call Indels also using lofreq
 */
 process call_indels {
-  maxForks params.maxForks_mediummem
+  label 'lowmem'
   publishDir "${params.outdir}", mode:'link'
 
   input:
@@ -622,7 +618,7 @@ process tabulate_variants {
  R and processing with tidyverse packages
 */
 process prepend_depth {
-  maxForks params.maxForks_lowmem
+  label 'lowmem'
 
   input:
   tuple val(sample_id), path(depth) from post_depth_ch
