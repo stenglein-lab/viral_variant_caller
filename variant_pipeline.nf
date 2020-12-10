@@ -13,9 +13,9 @@
 
 
 params.fastq_dir = "$baseDir/fastq/"
-params.initial_fastqc_dir = "$baseDir/initial_fastqc/" 
-params.post_trim_fastqc_dir = "$baseDir/post_trim_fastqc/" 
-params.outdir = "results"                                                       
+params.outdir = "$baseDir/results"                                                       
+params.initial_fastqc_dir = "${params.outdir}/initial_fastqc/" 
+params.post_trim_fastqc_dir = "${params.outdir}/post_trim_fastqc/" 
 
 
 // ------------------
@@ -49,7 +49,8 @@ params.viral_bwa_threads = "8"
 
 
 // where are R scripts found...
-params.R_bindir="${baseDir}"
+params.R_bindir="${baseDir}/scripts"
+params.scripts_bindir="${baseDir}/scripts"
 
 // conda for snpEFF
 params.snpeff_jar = "/home/apps/snpEff/snpEff.jar" 
@@ -528,7 +529,7 @@ process call_snvs {
   
   # analyze variants will determine whether these are non synonymous or synonymous variants
   # and identify the impacted CDS, etc.
-  ${baseDir}/analyze_variants ${params.viral_gff} vcf >  "${sample_id}.variant_alleles.txt"
+  ${params.scripts_bindir}/analyze_variants ${params.viral_gff} vcf >  "${sample_id}.variant_alleles.txt"
   
   """
 }
@@ -548,7 +549,7 @@ process tabulate_snvs {
 
   script:
   """
-  Rscript ${baseDir}/analyze_snv_vcf.R $vcf
+  Rscript ${params.R_bindir}/analyze_snv_vcf.R $vcf
   """
 }
 */
@@ -590,7 +591,7 @@ process tabulate_indel_variants {
 
   script:
   """
-  Rscript ${baseDir}/analyze_indel_vcf.R ${params.R_bindir} $vcf
+  Rscript ${params.R_bindir}/analyze_indel_vcf.R ${params.R_bindir} $vcf
   """
 }
 
@@ -608,7 +609,7 @@ process tabulate_variants {
 
   script:
   """
-  ${baseDir}/tabulate_variants $variant_alleles > variant_table.txt
+  ${params.scripts_bindir}/tabulate_variants $variant_alleles > variant_table.txt
   """
 }
 
@@ -650,7 +651,7 @@ process tabulate_depth {
   script:
   """
   cat $depth_files > all.depth
-  Rscript ${baseDir}/plot_depth.R ${params.R_bindir} all.depth
+  Rscript ${params.R_bindir}/plot_depth.R ${params.R_bindir} all.depth
   """
 }
 
