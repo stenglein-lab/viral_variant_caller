@@ -58,4 +58,10 @@ This pipeline depends on the scripts in this repository as well as the following
 - [samtools](http://samtools.github.io/)
 - [R](https://www.r-project.org/)
 
-We are working to integrate a conda environment to facilitate use of these tools for this pipeline but for the moment, these tools must be installed and in the user's PATH.
+#### Integration with conda
+
+The easiest way to handle dependencies for this pipeline is to use the included [conda environment](./environment_setup/variant_conda_environment.yaml).  Please see the [instructions to install and setup this environment](./environment_setup/README.md).
+
+
+
+
