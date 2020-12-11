@@ -41,7 +41,6 @@ params.host_bt_threads = "8"
 params.refseq_dir = "${baseDir}/refseq/"
 params.refseq_name = "wa1"
 params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
-params.refseq_gb = "${params.refseq_dir}/${params.refseq_name}.gb"
 params.refseq_gff = "${params.refseq_dir}/${params.refseq_name}.gff"
 params.refseq_bt_index = "${params.refseq_dir}/${params.refseq_name}"
 params.refseq_bt_min_score = "120"
@@ -74,7 +73,7 @@ params.min_allele_freq="0.03"
 
 // TODO: command line arg processing and validating 
 
-// TODO: check that appropriate refseq files exist (fasta, gb, etc.)
+// TODO: check that appropriate refseq files exist (fasta, gff, etc.)
 
 // TODO: handle single end or paired end, possibly automatically
 
@@ -120,18 +119,18 @@ process setup_indexes {
   # ----------------
 
   # make a minimal snpEff.config 
-  rm -f ${params.snpEff_cfg}
+  rm -f ${params.snpeff_cfg}
   echo "${params.refseq_name}.genome: ${params.refseq_name}" > ${params.snpeff_cfg}
 
   # make a directory for the snp eff db
   mkdir -p ${params.snpeff_data}/${params.refseq_name}
 
-  # cp fasta and gb for virus refseq to the directory location snpeff is expecting
+  # cp fasta and gff for virus refseq to the directory location snpeff is expecting
   cp ${params.refseq_fasta} ${params.snpeff_data}/${params.refseq_name}/sequences.fa
-  cp ${params.refseq_gb} ${params.snpeff_data}/${params.refseq_name}/genes.gbk
+  cp ${params.refseq_gff} ${params.snpeff_data}/${params.refseq_name}/genes.gff
 
   # build the snpEff db
-  snpEff build -c ${params.snpeff_cfg} -nodownload -v -genbank -dataDir ${params.snpeff_data} ${params.refseq_name}
+  snpEff build -c ${params.snpeff_cfg} -nodownload -v -gff3 -dataDir ${params.snpeff_data} ${params.refseq_name} > ${params.snpeff_data}/${params.refseq_name}.build
 
   # -----------------------
   # bwa index viral refseq
@@ -142,8 +141,7 @@ process setup_indexes {
   # GATK index setup
   # -----------------
   # setup gatk indexes for BSQR
-  # ${params.gatk_exe} IndexFeatureFile -I ${params.ignore_regions} 
-  gatk IndexFeatureFile -I ${params.ignore_regions} 
+  gatk IndexFeatureFile --feature-file ${params.ignore_regions} 
 
   rm -f "${params.refseq_dir}/${params.refseq_name}.dict"
   gatk CreateSequenceDictionary -R ${params.refseq_fasta}
@@ -328,7 +326,7 @@ process post_trim_qc {
  Use multiqc to merge post-trimming fastq reports
 */
 process post_trim_multiqc {
-  publishDir "${params.outdir}"
+  publishDir "${params.outdir}", mode:'link'
 
   input:
   val(all_sample_ids) from post_trim_multiqc_ch.collect()
@@ -439,7 +437,7 @@ process bwa_align_to_refseq {
 */
 process apply_bsqr {
   label 'lowmem'                                                                
-  publishDir "${params.outdir}", pattern: "*.bam"
+  publishDir "${params.outdir}", mode:'link', pattern: "*.bam"
 
   input:
   tuple val(sample_id), path(input_bam) from post_bwa_align_ch
@@ -498,9 +496,10 @@ process call_snvs {
   tuple val(sample_id), path(input_bam) from post_bsqr_snv_ch
 
   output:
-  // path("${input_bam}.snv.vcf") into post_snv_call_ch
   path("${sample_id}.variant_alleles.txt") into post_variant_call_ch
+  tuple val(sample_id), path("${sample_id}.variant_alleles.txt") into post_variant_call_prepend_ch
   tuple val(sample_id), path(depth) optional true into post_variant_call_depth_ch
+  tuple val(sample_id), path("${input_bam}.snv.vcf") into post_snv_call_ch
 
   script:
   """
@@ -511,15 +510,14 @@ process call_snvs {
   # use lofreq to call variants
   
   # lofreq call to quantify variant frequencies 
-  # lofreq call-parallel --no-default-filter --pp-threads ${params.host_bt_threads} -f ${params.refseq_fasta} -o pre_vcf ${input_bam}
-  lofreq call --no-default-filter -f ${params.refseq_fasta} -o pre_vcf ${input_bam}
+  lofreq call --no-default-filter -f ${params.refseq_fasta} -o ${input_bam}.pre_vcf ${input_bam}
 
   # call lofreq filter separately to avoid doing strand-bias filtering
   # -v 40 --> requires minimum 40x coverage
   # -V 0 --> no coverage maximum
   # -a 0.01 --> call variants above 1% (0.01 = min allele frequency)
   # -A 0 --> no maximum allele frequency
-  lofreq filter -v ${params.min_depth_for_variant_call} -V 0 -a ${params.min_allele_freq} -A 0 --no-defaults -i  pre_vcf -o vcf
+  lofreq filter -v ${params.min_depth_for_variant_call} -V 0 -a ${params.min_allele_freq} -A 0 --no-defaults -i  ${input_bam}.pre_vcf -o ${input_bam}.snv.vcf
   
   # ----------------
   # variant analysis
@@ -527,7 +525,8 @@ process call_snvs {
   
   # analyze variants will determine whether these are non synonymous or synonymous variants
   # and identify the impacted CDS, etc.
-  ${params.scripts_bindir}/analyze_variants ${params.refseq_gff} vcf >  "${sample_id}.variant_alleles.txt"
+  # this uses a perl script to parse the lofreq vcf and output a table of variants
+  ${params.scripts_bindir}/analyze_variants ${params.refseq_gff} ${input_bam}.snv.vcf >  "${sample_id}.variant_alleles.txt"
   
   """
 }
@@ -564,7 +563,8 @@ process call_indels {
   tuple val(sample_id), path(input_bam) from post_bsqr_indel_ch
 
   output:
-  tuple val(sample_id), path("${input_bam}.indel.vcf") into post_indel_call_ch
+  path("${input_bam}.indel.vcf") into post_indel_call_ch
+  tuple val(sample_id), path("${input_bam}.indel.vcf") into post_indel_call_snpeff_ch
 
   shell:
   '''
@@ -578,22 +578,20 @@ process call_indels {
  tabulate indel calls for all datasets
 */
 // TODO: this failed in the case where there was a single variant in the vcf file...
-/*
 process tabulate_indel_variants {
   publishDir "${params.outdir}", mode:'link'
 
   input:
-  path(vcf) from post_indel_call_ch.collect()
+  path(vcfs) from post_indel_call_ch.collect()
 
   output:
   path("Structural_variant_summary.xlsx") into post_indel_variant_tabulate_ch
 
   script:
   """
-  Rscript ${params.R_bindir}/analyze_indel_vcf.R ${params.R_bindir} $vcf
+  Rscript ${params.R_bindir}/analyze_indel_vcf.R ${params.R_bindir} $vcfs
   """
 }
-*/
 
 /* 
  use snpEff to annotate indel vcfs
@@ -602,14 +600,42 @@ process annotate_indel_variants {
   publishDir "${params.outdir}", mode:'link'
 
   input:
-  path(vcf) from post_indel_call_ch
+  tuple val(sample_id), path(vcf) from post_indel_call_snpeff_ch
 
   output:
-  path(annotated_vcf) from post_indel_annotate_ch
+  tuple val(sample_id), path("${vcf}.snp_eff") into post_indel_annotate_ch
 
   script:
   """
-  snpEff ann -c ${params.snpeff_cfg} -t ${params.snpeff_threads} $vcf > ${vcf}.snp_eff
+  snpEff ann -c ${params.snpeff_cfg} -dataDir ${params.snpeff_data} \
+    -no-downstream \
+    -no-upstream \
+    -no-intergenic \
+    -no-intron \
+    ${params.refseq_name} $vcf > ${vcf}.snp_eff
+  """
+}
+
+/* 
+ use snpEff to annotate snvs
+ */
+process annotate_snvs {
+  publishDir "${params.outdir}", mode:'link'
+
+  input:
+  tuple val(sample_id), path(vcf) from post_snv_call_ch
+
+  output:
+  tuple val(sample_id), path("${vcf}.snp_eff") into post_snv_annotate_ch
+
+  script:
+  """
+  snpEff ann -c ${params.snpeff_cfg} -dataDir ${params.snpeff_data} \
+    -no-downstream \
+    -no-upstream \
+    -no-intergenic \
+    -no-intron \
+    ${params.refseq_name} $vcf > ${vcf}.snp_eff
   """
 }
 

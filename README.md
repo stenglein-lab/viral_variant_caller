@@ -63,3 +63,19 @@ This pipeline depends on the scripts in this repository as well as the following
 - [R](https://www.r-project.org/)
 
 
+
+
+#### A note on the snpEff database
+
+I was getting 'ERROR_CHROMOSOME_NOT_FOUND' errors in the snpEff vcf output, and to fix it had to modify the genbank file I downloaded from genbank to change the version field from: 
+```
+VERSION     MN985325.1
+```
+
+to:
+
+```
+VERSION     MN985325
+```
+
+This could possibly be avoided by using GTF annotation instead of GB?

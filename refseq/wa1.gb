@@ -2,7 +2,7 @@ LOCUS       MN985325               29882 bp    RNA     linear   VRL 29-JUL-2020
 DEFINITION  Severe acute respiratory syndrome coronavirus 2 isolate
             SARS-CoV-2/human/USA/WA-CDC-WA1/2020, complete genome.
 ACCESSION   MN985325
-VERSION     MN985325.1
+VERSION     MN985325
 KEYWORDS    .
 SOURCE      Severe acute respiratory syndrome coronavirus 2 (SARS-CoV-2)
   ORGANISM  Severe acute respiratory syndrome coronavirus 2

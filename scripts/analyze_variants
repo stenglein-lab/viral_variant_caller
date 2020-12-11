@@ -31,12 +31,6 @@ my $usage = <<USAGE;
  the variant's fraction, as defined by the DP4 field in the VCF file 
 
 
- It only outputs variants with a minimum depth and minimum # of reads supporting variants as defined by the 
- parameters:
-
-    min_overall_depth 
-    min_variant_depth 
-
  Mark Stenglein, 3/27/2017
 
 
@@ -115,8 +109,6 @@ while (<$vcf_fh>)
       next;
    }
 
-   my $min_overall_depth = 20;
-   my $min_variant_depth = 4;
    my $ref_depth = undef;
    my $variant_depth = undef;
    my $overall_depth = undef;
@@ -132,20 +124,8 @@ while (<$vcf_fh>)
       my ($depth, $d1, $d2, $d3, $d4) = @matched_depths;
       $overall_depth = $depth;
 
-
-      if ($overall_depth < $min_overall_depth)
-      {
-         ## warn "insufficient depth: $_\n";
-         next;
-      }
       $ref_depth = $d1 + $d2;
       $variant_depth = $d3 + $d4;
-      if ($variant_depth < $min_variant_depth)
-      {
-         ## warn "insufficient variant depth: $_\n";
-         next;
-      }
-      ## print "$_\n";
    }
    else
    {
@@ -194,17 +174,9 @@ sub output_variants
 
 sub process_variant
 {
-	# TODO: leave this for upstream variant calling?
-   my $min_allele_freq = 0.03;
-
    my ($seg_id, $position, $ref, $alt, $ref_depth, $variant_depth, $depth) = @_;
 
    my $variant_fraction = sprintf ("%0.2f", ($variant_depth / $depth) );
-
-	if ($variant_fraction < $min_allele_freq) 
-	{
-	   return;;
-	}
 
    # Default values in case not in an annotated position
 	my $cds_hit = "NA";
