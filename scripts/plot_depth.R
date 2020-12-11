@@ -1,7 +1,5 @@
 library (tidyverse)
 library (openxlsx)
-library (pheatmap)
-library (DT)
 
 # This script reads in a variant table and generates some plots and summaries
 #
