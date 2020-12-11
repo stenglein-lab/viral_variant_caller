@@ -13,7 +13,9 @@ git clone https://github.com/stenglein-lab/viral_variant_caller.git
 
 ### Usage
 
-To run this pipeline, create and populate a directory named `fastq` in the `viral_variant_caller` directory with the datasets (fastq) files that you wish to analyze.  Then run:
+Before you run this pipeline, you'll have to make sure that dependencies (software on which this pipeline depends) are in place.  The best way to do this is to use the included [conda environment](./environment_setup/variant_conda_environment.yaml).  Please see the [instructions to install and setup this environment](./environment_setup/README.md) for instructions on how to install and initialize this environment.
+
+To run the pipeline, you'll need to move your datasets (fastq files) into a new directory named `fastq` in the `viral_variant_caller` directory with the datasets (fastq) files that you wish to analyze.  Then run:
 
 ```
 nextflow run variant_pipeline.nf 
@@ -32,7 +34,7 @@ params.viral_gb = "${baseDir}/viral_refseq/${params.viral_refseq_name}.gb"
 params.viral_gff = "${baseDir}/viral_refseq/${params.viral_refseq_name}.gff"  
 ```
 
-(The viral_refseq directory should be populated with appropriate sequence files in .fasta, .gb, and .gff format.)
+The viral_refseq directory should be populated with appropriate sequence files in .fasta, .gb, and .gff format.  So, in this example this directory is expected to contain files named wa1.fasta, wa1.gb, and wa1.gff.
 
 #### Host filtering
 
@@ -41,6 +43,8 @@ A step in this pipline removes host-derived reads.  To modify the host genome us
 params.host_bt_index = "/home/databases/primates/agm_genome"                    
 params.host_bt_suffix = "agm_genome"                                            
 ```
+
+(agm here stands for African green monkey, because when this pipeline was developed, we were analyzing virus grown in Vero cells, which are from that species of monkey.
 
 
 ### Dependencies
@@ -57,11 +61,5 @@ This pipeline depends on the scripts in this repository as well as the following
 - [bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml)
 - [samtools](http://samtools.github.io/)
 - [R](https://www.r-project.org/)
-
-#### Integration with conda
-
-The easiest way to handle dependencies for this pipeline is to use the included [conda environment](./environment_setup/variant_conda_environment.yaml).  Please see the [instructions to install and setup this environment](./environment_setup/README.md).
-
-
 
 
