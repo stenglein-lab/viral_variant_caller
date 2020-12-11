@@ -37,15 +37,16 @@ params.host_bt_min_score = "60"
 params.host_bt_threads = "8"
 
 
-// SARS-CoV-2 wa1 refseq
-params.viral_refseq_name = "wa1"
-params.viral_fasta = "${baseDir}/viral_refseq/${params.viral_refseq_name}.fasta"
-params.viral_gb = "${baseDir}/viral_refseq/${params.viral_refseq_name}.gb"
-params.viral_gff = "${baseDir}/viral_refseq/${params.viral_refseq_name}.gff"
-params.viral_bt_index = "${baseDir}/viral_refseq/${params.viral_refseq_name}"
-params.viral_bt_min_score = "120"
+// SARS-CoV-2 wa1 refseq, or a reference seq of your choosing
+params.refseq_dir = "${baseDir}/refseq/"
+params.refseq_name = "wa1"
+params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
+params.refseq_gb = "${params.refseq_dir}/${params.refseq_name}.gb"
+params.refseq_gff = "${params.refseq_dir}/${params.refseq_name}.gff"
+params.refseq_bt_index = "${params.refseq_dir}/${params.refseq_name}"
+params.refseq_bt_min_score = "120"
 
-params.viral_bwa_threads = "8"
+params.refseq_bwa_threads = "8"
 
 
 // where are R scripts found...
@@ -53,15 +54,12 @@ params.R_bindir="${baseDir}/scripts"
 params.scripts_bindir="${baseDir}/scripts"
 
 // conda for snpEFF
-params.snpeff_jar = "/home/apps/snpEff/snpEff.jar" 
-params.snpeff_cfg = "${baseDir}/snpEff.config" 
-params.snpeff_data = "${baseDir}/viral_refseq/snpeff_data/"
-
-// conda or something for gatk?
-params.gatk_exe="/home/apps/gatk-4.1.9.0/gatk"
+params.snpeff_cfg = "${params.refseq_dir}/snpEff.config" 
+params.snpeff_data = "${params.refseq_dir}/snpeff_data/"
+params.snpeff_threads = "8"
 
 // ignoring regions with 
-params.ignore_regions="${baseDir}/viral_refseq/ignore_regions.bed"
+params.ignore_regions="${params.refseq_dir}/ignore_regions.bed"
 
 // flag to optionally run cd-hit to collapse non-unique reads
 // skip this step by default
@@ -115,40 +113,40 @@ process setup_indexes {
   # ------------------
   # lofreq fasta index
   # ------------------
-  lofreq faidx ${params.viral_fasta}
+  lofreq faidx ${params.refseq_fasta}
 
   # ----------------
   # setup snpEFF db
   # ----------------
 
   # make a minimal snpEff.config 
-  rm -f snpEff.config
-  echo "${params.viral_refseq_name}.genome: ${params.viral_refseq_name}" > ${params.snpeff_cfg}
+  rm -f ${params.snpEff_cfg}
+  echo "${params.refseq_name}.genome: ${params.refseq_name}" > ${params.snpeff_cfg}
 
   # make a directory for the snp eff db
-  mkdir -p ${params.snpeff_data}/${params.viral_refseq_name}
+  mkdir -p ${params.snpeff_data}/${params.refseq_name}
 
   # cp fasta and gb for virus refseq to the directory location snpeff is expecting
-  # these must exist! 
-  cp ${params.viral_fasta} ${params.snpeff_data}/${params.viral_refseq_name}/sequences.fa
-  cp ${params.viral_gb} ${params.snpeff_data}/${params.viral_refseq_name}/genes.gbk
+  cp ${params.refseq_fasta} ${params.snpeff_data}/${params.refseq_name}/sequences.fa
+  cp ${params.refseq_gb} ${params.snpeff_data}/${params.refseq_name}/genes.gbk
 
   # build the snpEff db
-  java -jar ${params.snpeff_jar} build -c ${params.snpeff_cfg} -nodownload -v -genbank -dataDir ${params.snpeff_data} ${params.viral_refseq_name}
+  snpEff build -c ${params.snpeff_cfg} -nodownload -v -genbank -dataDir ${params.snpeff_data} ${params.refseq_name}
 
   # -----------------------
   # bwa index viral refseq
   # -----------------------
-  bwa index ${params.viral_fasta}
+  bwa index ${params.refseq_fasta}
 
   # -----------------
   # GATK index setup
   # -----------------
   # setup gatk indexes for BSQR
-  ${params.gatk_exe} IndexFeatureFile -I ${params.ignore_regions} 
+  # ${params.gatk_exe} IndexFeatureFile -I ${params.ignore_regions} 
+  gatk IndexFeatureFile -I ${params.ignore_regions} 
 
-  rm -f "${baseDir}/viral_refseq/${params.viral_refseq_name}.dict"
-  ${params.gatk_exe} CreateSequenceDictionary -R ${params.viral_fasta}
+  rm -f "${params.refseq_dir}/${params.refseq_name}.dict"
+  gatk CreateSequenceDictionary -R ${params.refseq_fasta}
   """
 }
 
@@ -424,9 +422,9 @@ process bwa_align_to_refseq {
   rg=$(echo "@RG\\tID:$id\\tSM:$id"_"$sm\\tLB:$id"_"$sm\\tPL:ILLUMINA")
   
   bwa mem \
-  -t !{params.viral_bwa_threads} \
+  -t !{params.refseq_bwa_threads} \
   -R $rg \
-  !{params.viral_fasta} !{input_fastq} | samtools sort -@12 -o !{sample_id}.bam  -
+  !{params.refseq_fasta} !{input_fastq} | samtools sort -@12 -o !{sample_id}.bam  -
   '''
 }
 
@@ -450,22 +448,22 @@ process apply_bsqr {
   val("indexes_complete") from post_index_setup_ch
 
   output:
-  tuple val(sample_id), path("${sample_id}.${params.viral_refseq_name}.bam") into post_bsqr_snv_ch
-  tuple val(sample_id), path("${sample_id}.${params.viral_refseq_name}.bam") into post_bsqr_depth_ch
-  tuple val(sample_id), path("${sample_id}.${params.viral_refseq_name}.bam") into post_bsqr_indel_ch
+  tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_snv_ch
+  tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_depth_ch
+  tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_indel_ch
 
   """
-  ${params.gatk_exe} BaseRecalibrator \
+  gatk BaseRecalibrator \
      -I ${input_bam} \
-     -R ${params.viral_fasta} \
+     -R ${params.refseq_fasta} \
      --known-sites ${params.ignore_regions} \
      -O recalibration.table
 
-  ${params.gatk_exe} ApplyBQSR \
-     -R ${params.viral_fasta} \
+  gatk ApplyBQSR \
+     -R ${params.refseq_fasta} \
      -I ${input_bam} \
      --bqsr-recal-file recalibration.table \
-     -O ${sample_id}.${params.viral_refseq_name}.bam
+     -O ${sample_id}.${params.refseq_name}.bam
   """
 }
 
@@ -513,8 +511,8 @@ process call_snvs {
   # use lofreq to call variants
   
   # lofreq call to quantify variant frequencies 
-  # lofreq call-parallel --no-default-filter --pp-threads ${params.host_bt_threads} -f ${params.viral_fasta} -o pre_vcf ${input_bam}
-  lofreq call --no-default-filter -f ${params.viral_fasta} -o pre_vcf ${input_bam}
+  # lofreq call-parallel --no-default-filter --pp-threads ${params.host_bt_threads} -f ${params.refseq_fasta} -o pre_vcf ${input_bam}
+  lofreq call --no-default-filter -f ${params.refseq_fasta} -o pre_vcf ${input_bam}
 
   # call lofreq filter separately to avoid doing strand-bias filtering
   # -v 40 --> requires minimum 40x coverage
@@ -529,7 +527,7 @@ process call_snvs {
   
   # analyze variants will determine whether these are non synonymous or synonymous variants
   # and identify the impacted CDS, etc.
-  ${params.scripts_bindir}/analyze_variants ${params.viral_gff} vcf >  "${sample_id}.variant_alleles.txt"
+  ${params.scripts_bindir}/analyze_variants ${params.refseq_gff} vcf >  "${sample_id}.variant_alleles.txt"
   
   """
 }
@@ -566,13 +564,13 @@ process call_indels {
   tuple val(sample_id), path(input_bam) from post_bsqr_indel_ch
 
   output:
-  path("${input_bam}.indel.vcf") into post_indel_call_ch
+  tuple val(sample_id), path("${input_bam}.indel.vcf") into post_indel_call_ch
 
   shell:
   '''
-  lofreq indelqual --dindel -f !{params.viral_fasta} -o !{input_bam}.indelqual.bam !{input_bam}
+  lofreq indelqual --dindel -f !{params.refseq_fasta} -o !{input_bam}.indelqual.bam !{input_bam}
 
-  lofreq call --call-indels --only-indels -f !{params.viral_fasta} !{input_bam}.indelqual.bam > !{input_bam}.indel.vcf
+  lofreq call --call-indels --only-indels -f !{params.refseq_fasta} !{input_bam}.indelqual.bam > !{input_bam}.indel.vcf
   '''
 }
 
@@ -580,6 +578,7 @@ process call_indels {
  tabulate indel calls for all datasets
 */
 // TODO: this failed in the case where there was a single variant in the vcf file...
+/*
 process tabulate_indel_variants {
   publishDir "${params.outdir}", mode:'link'
 
@@ -594,6 +593,26 @@ process tabulate_indel_variants {
   Rscript ${params.R_bindir}/analyze_indel_vcf.R ${params.R_bindir} $vcf
   """
 }
+*/
+
+/* 
+ use snpEff to annotate indel vcfs
+ */
+process annotate_indel_variants {
+  publishDir "${params.outdir}", mode:'link'
+
+  input:
+  path(vcf) from post_indel_call_ch
+
+  output:
+  path(annotated_vcf) from post_indel_annotate_ch
+
+  script:
+  """
+  snpEff ann -c ${params.snpeff_cfg} -t ${params.snpeff_threads} $vcf > ${vcf}.snp_eff
+  """
+}
+
 
 /*
  tabulate variants for all datasets

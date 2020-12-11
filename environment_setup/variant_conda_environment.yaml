@@ -9,6 +9,7 @@ dependencies:
   - multiqc=1.6
   - bowtie2=2.4.*
   - lofreq=2.1.*
+  - snpeff=5.0.*
   - gatk4=4.0.* 
   - cutadapt=3.0
   - samtools=1.11
