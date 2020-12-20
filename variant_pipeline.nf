@@ -653,7 +653,7 @@ process extract_annotated_indel_variants {
 
   script:
   """
-  SnpSift extractFields ${snp_eff} CHROM POS ID REF ALT AF DP SB DP4 INDEL CONSVAR ANN[*].ALLELE ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].BIOTYPE ANN[*].HGVS_C $snp_eff > ${snp_eff}.snp_sift
+  SnpSift extractFields ${snp_eff} CHROM POS ID REF ALT AF DP SB DP4 INDEL CONSVAR ANN[*].ALLELE ANN[*].EFF$
   """
 }
 
