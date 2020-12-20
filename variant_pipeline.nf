@@ -57,6 +57,12 @@ params.snpeff_cfg = "${params.refseq_dir}/snpEff.config"
 params.snpeff_data = "${params.refseq_dir}/snpeff_data/"
 params.snpeff_threads = "8"
 
+// snpsift
+
+params.snpsift_cfg = "${params.snpeff_cfg}/snpsift.config"
+params.snpsift_data = "${params.snpeff_data}/snpsift_data/"
+params.snpsift_threads = "8"
+
 // ignoring regions with 
 params.ignore_regions="${params.refseq_dir}/ignore_regions.bed"
 
@@ -639,6 +645,25 @@ process annotate_snvs {
   """
 }
 
+/* 
+ use SnpSift to extract SnpEff annotations
+ */
+process extract_annotated_indel_variants {
+  publishDir "${params.outdir}", mode:'link'
+
+  input:
+  tuple val(sample_id), path("${vcf}.snp_eff") from post_indel_annotate_ch
+
+  output:
+  tuple val(sample_id), path("${vcf}.snp_sift") into post_extract_annotations_ch
+
+  script:
+  """
+  SnpSift extractFields -c ${params.snpsift_cfg} -dataDir ${params.snpsift_data} \
+    CHROM POS ID REF ALT AF DP SB DP4 INDEL CONSVAR ANN[*].ALLELE ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].BIOTYPE ANN[*].HGVS_C \
+    ${params.refseq_name} $vcf > ${vcf}.snp_sift
+  """
+}
 
 /*
  tabulate variants for all datasets
