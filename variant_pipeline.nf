@@ -57,12 +57,6 @@ params.snpeff_cfg = "${params.refseq_dir}/snpEff.config"
 params.snpeff_data = "${params.refseq_dir}/snpeff_data/"
 params.snpeff_threads = "8"
 
-// snpsift
-
-params.snpsift_cfg = "${params.snpeff_cfg}/snpsift.config"
-params.snpsift_data = "${params.snpeff_data}/snpsift_data/"
-params.snpsift_threads = "8"
-
 // ignoring regions with 
 params.ignore_regions="${params.refseq_dir}/ignore_regions.bed"
 
@@ -659,9 +653,7 @@ process extract_annotated_indel_variants {
 
   script:
   """
-  SnpSift extractFields -c ${params.snpsift_cfg} -dataDir ${params.snpsift_data} \
-    CHROM POS ID REF ALT AF DP SB DP4 INDEL CONSVAR ANN[*].ALLELE ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].BIOTYPE ANN[*].HGVS_C \
-    ${params.refseq_name} $snp_eff > ${snp_eff}.snp_sift
+  SnpSift extractFields ${snp_eff} CHROM POS ID REF ALT AF DP SB DP4 INDEL CONSVAR ANN[*].ALLELE ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].BIOTYPE ANN[*].HGVS_C $snp_eff > ${snp_eff}.snp_sift
   """
 }
 
