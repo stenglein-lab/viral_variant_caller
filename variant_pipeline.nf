@@ -645,23 +645,23 @@ process annotate_snvs {
   """
 }
 
-/* 
+/*
  use SnpSift to extract SnpEff annotations
  */
 process extract_annotated_indel_variants {
   publishDir "${params.outdir}", mode:'link'
 
   input:
-  tuple val(sample_id), path("${vcf}.snp_eff") from post_indel_annotate_ch
+  tuple val(sample_id), path(snp_eff) from post_indel_annotate_ch
 
   output:
-  tuple val(sample_id), path("${vcf}.snp_sift") into post_extract_annotations_ch
+  tuple val(sample_id), path("${snp_eff}.snp_sift") into post_extract_annotations_ch
 
   script:
   """
   SnpSift extractFields -c ${params.snpsift_cfg} -dataDir ${params.snpsift_data} \
     CHROM POS ID REF ALT AF DP SB DP4 INDEL CONSVAR ANN[*].ALLELE ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].BIOTYPE ANN[*].HGVS_C \
-    ${params.refseq_name} $vcf > ${vcf}.snp_sift
+    ${params.refseq_name} $snp_eff > ${snp_eff}.snp_sift
   """
 }
 
