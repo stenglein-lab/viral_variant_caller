@@ -676,6 +676,24 @@ process extract_annotated_snv_variants {
 }
 
 /*
+ tabulate snpeff indel calls for all datasets using snpsift output
+*/
+process tabulate_snpeff_indel_variants {
+  publishDir "${params.outdir}", mode:'link'
+
+  input:
+  path(snp_sifts) from post_extract_indel_annotations_ch.collect()
+
+  output:
+  path("Structural_variant_snpeff_summary.xlsx") into post_snpeff_indel_variant_tabulate_ch
+
+  script:
+  """
+  Rscript ${params.R_bindir}/analyze_snpeff_indel.R ${params.R_bindir} $snp_sifts
+  """
+}
+
+/*
  tabulate variants for all datasets
 */
 process tabulate_variants {
