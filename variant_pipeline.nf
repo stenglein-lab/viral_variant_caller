@@ -640,7 +640,7 @@ process annotate_snvs {
 }
 
 /*
- use SnpSift to extract SnpEff annotations
+ use SnpSift to extract SnpEff indel annotations
  */
 process extract_annotated_indel_variants {
   publishDir "${params.outdir}", mode:'link'
@@ -649,11 +649,29 @@ process extract_annotated_indel_variants {
   tuple val(sample_id), path(snp_eff) from post_indel_annotate_ch
 
   output:
-  tuple val(sample_id), path("${snp_eff}.snp_sift") into post_extract_annotations_ch
+  tuple val(sample_id), path("${snp_eff}.snp_sift") into post_extract_indel_annotations_ch
 
   script:
   """
-  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB DP4 INDEL CONSVAR ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].BIOTYPE ANN[*].HGVS_C > ${snp_eff}.snp_sift
+  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE > ${snp_eff}.snp_sift
+  """
+}
+
+/*
+ use SnpSift to extract SnpEff snv annotations
+ */
+process extract_annotated_snv_variants {
+  publishDir "${params.outdir}", mode:'link'
+
+  input:
+  tuple val(sample_id), path(snp_eff) from post_snv_annotate_ch
+
+  output:
+  tuple val(sample_id), path("${snp_eff}.snp_sift") into post_extract_snv_annotations_ch
+
+  script:
+  """
+  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE > ${snp_eff}.snp_sift
   """
 }
 
