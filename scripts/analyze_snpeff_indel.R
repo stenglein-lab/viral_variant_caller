@@ -15,7 +15,7 @@ if (!interactive()) {
   # snp sift file names passed as command line arguments
   r_bindir=args[1]
   # -c(1) --> all but the first element of the list
-  snp_sift_file_name = args[-c(1)]
+  snp_sifts = args[-c(1)]
 } else {
   # for troubleshooting via RStudio interface
   r_bindir <- "."
@@ -54,7 +54,7 @@ df <- df %>% mutate(Dataset_ID = str_replace(Dataset_ID, ".wa1.bam.indel.vcf.snp
 #?as.numeric
 # make sure numeric info is numeric
 df$Position <- as.numeric(as.character(df$Position))
-df$Allele_frequency <- as.numeric(as.character(df$Allele_frequency))
+df$Allele_frequency <- as.numeric(as.character(df$Frequency))
 df$Depth <- as.numeric(as.character(df$Depth))
 
 # output a summary table
