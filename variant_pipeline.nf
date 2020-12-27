@@ -648,17 +648,18 @@ process extract_annotated_indel_variants {
   input:
   tuple val(sample_id), path(snp_eff) from post_indel_annotate_ch
 
-  output:
+   output:
+  path("${snp_eff}.snp_sift") into indel_annotations_ch
   tuple val(sample_id), path("${snp_eff}.snp_sift") into post_extract_indel_annotations_ch
 
   script:
   """
-  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE > ${snp_eff}.snp_sift
+  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IM$
   """
 }
 
 /*
- use SnpSift to extract SnpEff snv annotations
+ use SnpSift to extract SnpEff snv  annotations
  */
 process extract_annotated_snv_variants {
   publishDir "${params.outdir}", mode:'link'
@@ -667,22 +668,23 @@ process extract_annotated_snv_variants {
   tuple val(sample_id), path(snp_eff) from post_snv_annotate_ch
 
   output:
+  path("${snp_eff}.snp_sift") into snv_annotations_ch
   tuple val(sample_id), path("${snp_eff}.snp_sift") into post_extract_snv_annotations_ch
 
   script:
   """
-  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE > ${snp_eff}.snp_sift
+  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IM$
   """
 }
 
 /*
- tabulate snpeff indel calls for all datasets using snpsift output
+ tabulate snpeff indel annotations for all datasets using snpsift output
 */
 process tabulate_snpeff_indel_variants {
   publishDir "${params.outdir}", mode:'link'
 
   input:
-  path(snp_sifts) from post_extract_indel_annotations_ch.collect()
+  path(snp_sifts) from indel_annotations_ch.collect()
 
   output:
   path("Structural_variant_snpeff_summary.xlsx") into post_snpeff_indel_variant_tabulate_ch
