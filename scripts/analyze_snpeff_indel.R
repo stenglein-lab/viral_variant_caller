@@ -29,7 +29,7 @@ variant_df <- function(snp_sift_file_name) {
   names(df) <- c("Chromosome", "Position", "Reference", "Variant", "Frequency", "Depth", "Strand_bias", "Indel", "Effect", "Impact", "Gene")
   
   # add the sample name as a column
-  df <- df %>% mutate(sample_name = snp_sift_file_name)
+  df <- df %>% mutate(sample_ID = snp_sift_file_name)
   
   return(df)
   
@@ -44,28 +44,21 @@ df <- lapply(snp_sifts, "variant_df")
 df <- do.call("rbind", df)
 
 # extract dataset ID from file name 
-df <- df %>% mutate(Dataset_ID = str_replace(sample_name, "results/", "") )
-df <- df %>% mutate(Dataset_ID = str_replace(Dataset_ID, ".wa1.bam.indel.vcf.snp_eff.snp_sift", ""))
+df <- df %>% mutate(sample_ID = str_replace(sample_ID, "results/", "") )
+df <- df %>% mutate(sample_ID = str_replace(sample_ID, ".wa1.bam.indel.vcf.snp_eff.snp_sift", ""))
+df <- df %>% select(sample_ID, everything())
+names(df)[1] <- "Dataset_ID"
 
 #?as.numeric
 # make sure numeric info is numeric
 df$Position <- as.numeric(as.character(df$Position))
-df$Allele_frequency <- as.numeric(as.character(df$Frequency))
+df$Frequency <- as.numeric(as.character(df$Frequency))
 df$Depth <- as.numeric(as.character(df$Depth))
 
 # output a summary table
 
-df_wide <- df %>% pivot_wider(id_cols = c(Chromosome, Position, Reference, Variant), 
-                              names_from=Dataset_ID, 
-                              #values_from=c(allele_freq, depth),
-                              values_from=c(Frequency, Depth),
-                              names_sort = T)
-
-#?pivot_wider
-df_wide <- df_wide %>% arrange(Position)
-
 wb <- createWorkbook("Structural_variant_snpeff_summary.xlsx")
 addWorksheet(wb, "structural_variants")
-writeData(wb, "structural_variants", df_wide,borders="all")
+writeData(wb, "structural_variants", df,borders="all")
 ?writeData
 saveWorkbook(wb, "Structural_variant_snpeff_summary.xlsx", overwrite = TRUE)
