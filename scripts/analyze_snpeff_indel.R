@@ -16,10 +16,6 @@ if (!interactive()) {
   r_bindir=args[1]
   # -c(1) --> all but the first element of the list
   snp_sifts = args[-c(1)]
-} else {
-  # for troubleshooting via RStudio interface
-  r_bindir <- "."
-  snp_sifts = list.files(path = "results", pattern = "*.snp_sift", full.names = T)
 }
 
 # takes one tsv file created by snpsift
