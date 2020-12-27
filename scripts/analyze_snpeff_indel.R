@@ -41,7 +41,7 @@ variant_df <- function(snp_sift_file_name) {
 
 # this runs variant_df on all the file names and returns a list of dataframes
 # see: https://www.rdocumentation.org/packages/base/versions/3.3.1/topics/lapply?
-df <- lapply(snip_sifts, "variant_df")
+df <- lapply(snp_sifts, "variant_df")
 
 # this rbinds all the dfs together to make one big tidy df
 # see: https://stat.ethz.ch/pipermail/r-help/2007-April/130594.html
