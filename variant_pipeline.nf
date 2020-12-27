@@ -696,6 +696,24 @@ process tabulate_snpeff_indel_variants {
 }
 
 /*
+ tabulate snpeff snv annotations for all datasets using snpsift output
+*/
+process tabulate_snpeff_snvs {
+  publishDir "${params.outdir}", mode:'link'
+
+  input:
+  path(snp_sifts) from snv_annotations_ch.collect()
+
+  output:
+  path("Single_nucleotide_variant_snpeff_summary.xlsx") into post_snpeff_snv_tabulate_ch
+
+  script:
+  """
+  Rscript ${params.R_bindir}/analyze_snpeff_snv.R ${params.R_bindir} $snp_sifts
+  """
+}
+
+/*
  tabulate variants for all datasets
 */
 process tabulate_variants {
