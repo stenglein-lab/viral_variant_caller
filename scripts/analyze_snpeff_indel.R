@@ -55,6 +55,10 @@ df$Position <- as.numeric(as.character(df$Position))
 df$Frequency <- as.numeric(as.character(df$Frequency))
 df$Depth <- as.numeric(as.character(df$Depth))
 
+# omit all indels with a frequency < 3%
+min_allele_freq = 0.03
+df <- df %>% filter(Frequency >= min_allele_freq)
+
 # output a summary table
 
 wb <- createWorkbook("Structural_variant_snpeff_summary.xlsx")
