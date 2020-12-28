@@ -66,6 +66,8 @@ df_wide <- df %>% pivot_wider(id_cols = c(Position, Reference, Variant, Depth, E
                               values_from=Frequency,
                               names_sort = T)
 
+df_wide <- df_wide %>% arrange(Position)
+
 wb <- createWorkbook("Single_nucleotide_variant_snpeff_summary.xlsx")
 addWorksheet(wb, "single_nucleotide_variants")
 writeData(wb, "single_nucleotide_variants", df_wide,borders="all")
