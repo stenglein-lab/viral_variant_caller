@@ -26,7 +26,7 @@ variant_df <- function(snp_sift_file_name) {
   df <- read.delim(snp_sift_file_name, header = T)
   
   as.data.frame(df)
-  names(df) <- c("Chromosome", "Position", "Reference", "Variant", "Frequency", "Depth", "Strand_bias", "Indel", "Effect", "Impact", "Gene")
+  names(df) <- c("Chromosome", "Position", "Reference_nt", "Variant_nt", "Frequency", "Depth", "Strand_bias", "Indel", "Effect", "Impact", "Gene", "Variant")
   
   # add the sample name as a column
   df <- df %>% mutate(sample_ID = snp_sift_file_name)
@@ -61,7 +61,7 @@ df <- df %>% filter(Frequency >= min_allele_freq)
 
 # output a summary table
 
-df_wide <- df %>% pivot_wider(id_cols = c(Position, Reference, Variant, Depth, Effect, Impact, Gene), 
+df_wide <- df %>% pivot_wider(id_cols = c(Position, Reference_nt, Variant_nt, Depth, Effect, Impact, Gene, Variant), 
                               names_from=Dataset_ID, 
                               values_from=Frequency,
                               names_sort = T)
