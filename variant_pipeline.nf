@@ -654,7 +654,7 @@ process extract_annotated_indel_variants {
 
   script:
   """
-  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE > ${snp_eff}.snp_sift
+  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].HGVS_P > ${snp_eff}.snp_sift
   """
 }
 
@@ -673,7 +673,7 @@ process extract_annotated_snv_variants {
 
   script:
   """
-  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE > ${snp_eff}.snp_sift
+  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].HGVS_P > ${snp_eff}.snp_sift
   """
 }
 
