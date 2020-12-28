@@ -61,8 +61,13 @@ df <- df %>% filter(Frequency >= min_allele_freq)
 
 # output a summary table
 
+df_wide <- df %>% pivot_wider(id_cols = c(Position, Reference, Variant, Depth, Effect, Impact, Gene), 
+                              names_from=Dataset_ID, 
+                              values_from=Frequency,
+                              names_sort = T)
+
 wb <- createWorkbook("Structural_variant_snpeff_summary.xlsx")
 addWorksheet(wb, "structural_variants")
-writeData(wb, "structural_variants", df,borders="all")
+writeData(wb, "structural_variants", df_wide,borders="all")
 ?writeData
 saveWorkbook(wb, "Structural_variant_snpeff_summary.xlsx", overwrite = TRUE)
