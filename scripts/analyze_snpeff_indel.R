@@ -66,6 +66,8 @@ df_wide <- df %>% pivot_wider(id_cols = c(Position, Reference, Variant, Depth, E
                               values_from=Frequency,
                               names_sort = T)
 
+df_wide <- df_wide %>% arrange(Position)
+
 wb <- createWorkbook("Structural_variant_snpeff_summary.xlsx")
 addWorksheet(wb, "structural_variants")
 writeData(wb, "structural_variants", df_wide,borders="all")
