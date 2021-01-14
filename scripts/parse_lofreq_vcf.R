@@ -21,10 +21,17 @@ parse_vcf <- function(vcf_file_name) {
   fix_df <- getFIX(vcf)
   fix_df
   
+  # this code block because if 1 and only 1 variant in the VCF file
+  # getFIX() returns a named vector instead of a matrix, which it
+  # returns in other cases
+  if (class(fix_df) == "character") {
+    fix_df <- t(as.matrix(fix_df))
+  }
+  
   # info: the DP, AF, etc fields in the 8th column
   info <- getINFO(vcf)
   
-  # merge columns
+  # concatenate columns
   vcf_df <- as.data.frame(cbind(fix_df, info))
   
   # parse out total depth and allele frequency from info column
