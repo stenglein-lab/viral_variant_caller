@@ -75,9 +75,9 @@ params.min_allele_freq="0.03"
 
 // TODO: check that appropriate refseq files exist (fasta, gff, etc.)
 
-// TODO: better control of concurrency in terms of processes
-
 // TODO: BSQR fails in case of no mapping reads... deal with this possibility 
+
+// TODO: handle fastq.gz compressed files 
 
 /*
  These fastq files represent the main input to this workflow
@@ -602,31 +602,6 @@ process prepend_snp_sift_output {
 }
 
 /*
- tabulate snpeff snv annotations for all datasets using snpsift output
-
- this will tabulate all SNV and indel variants together
-*/
-process tabulate_snpeff_variants {
-  publishDir "${params.outdir}", mode:'link'
-
-  input:
-  path(all_depth) from analyze_variants_depth_ch
-  path(snp_sifts) from post_prepend_snp_sift_ch.collect()
-
-  output:
-  path("variant_summary.xlsx") into post_snpeff_snv_tabulate_ch
-
-  script:
-  """
-  Rscript ${params.R_bindir}/analyze_snpeff_variants.R ${params.R_bindir} \
-    ${params.min_allele_freq} \
-    $all_depth \
-    ${params.min_depth_for_variant_call} \
-    $snp_sifts
-  """
-}
-
-/*
  This process prepends coverage depth info for all samples with the 
  sample ID as a first colum so it'll be tidy format for import into 
  R and processing with tidyverse packages
@@ -668,6 +643,31 @@ process tabulate_depth {
   """
 }
 
+
+/*
+ tabulate snpeff snv annotations for all datasets using snpsift output
+
+ this will tabulate all SNV and indel variants together
+*/
+process tabulate_snpeff_variants {
+  publishDir "${params.outdir}", mode:'link'
+
+  input:
+  path(all_depth) from analyze_variants_depth_ch
+  path(snp_sifts) from post_prepend_snp_sift_ch.collect()
+
+  output:
+  path("variant_summary.xlsx") into post_snpeff_snv_tabulate_ch
+
+  script:
+  """
+  Rscript ${params.R_bindir}/analyze_snpeff_variants.R ${params.R_bindir} \
+    ${params.min_allele_freq} \
+    $all_depth \
+    ${params.min_depth_for_variant_call} \
+    $snp_sifts
+  """
+}
 
 
 
