@@ -1,6 +1,7 @@
 library(tidyverse)
 library(openxlsx)
 library(readxl)
+library(pheatmap)
 
 # This script reads in files output by snpsift that includes SNV and indel variants 
 # and tabulates these variant calls in all datasets
@@ -273,8 +274,8 @@ all_cell_style <- createStyle(
 
 addStyle(wb=wb, sheet="variants", 
         style=all_cell_style,
-        cols = num_header_col+1:ncol(df_wide_enough_data),
-        rows = 2:nrow(df_wide_enough_data),
+        cols = num_header_col:ncol(df_wide_enough_data)+1,
+        rows = 2:nrow(df_wide_enough_data)+1,
         gridExpand = T
 )
 
@@ -296,7 +297,7 @@ col_header_style <- createStyle(
 addStyle(wb=wb, sheet="variants", 
         style=col_header_style,
         cols = 1:num_header_col,
-        rows = 1:nrow(df_wide_enough_data),
+        rows = 1:nrow(df_wide_enough_data)+1,
         gridExpand = T
 )
 
@@ -315,7 +316,8 @@ freezePane(wb, "variants", firstActiveRow = num_header_row+1, firstActiveCol = n
 # ?conditionalFormatting
 conditionalFormatting(wb=wb, sheet="variants", 
                       "colourScale",
-                      cols = num_header_col+1:ncol(df_wide_enough_data), rows = num_header_row+1:nrow(df_wide_enough_data),
+                      cols = num_header_col:ncol(df_wide_enough_data)+1, 
+                      rows = num_header_row+1:nrow(df_wide_enough_data)+1,
                       style = c("white", "green"),
                       rule = c(0, 1),
                       type = "colourScale"
@@ -336,7 +338,26 @@ setColWidths(
 
 
 # write out the spreadsheet
-saveWorkbook(wb, "variant_summary.xlsx", overwrite = TRUE)
+saveWorkbook(wb, paste0(output_directory, "variant_summary.xlsx"), overwrite = TRUE)
 
 
+# cluster datasets
+
+# ---------------------
+# Correlation heatmap 
+# ---------------------
+
+# this only keeps variants whose max fraction is >10%
+# var_tidy_df_highest <- var_tidy_df %>% group_by(position) %>%
+# mutate(max_af = max(variant_fraction, na.rm = T)) %>% filter(max_af > 0.1) %>% select(-max_af) %>% ungroup()
+
+corr_matrix <- as.matrix(df_wide_enough_data %>% select(-reference_sequence, -position, -gene, 
+                                                        -indel, -variant, -reference_base, -variant_base, 
+                                                        -effect) %>% filter())
+row_names_df <- df_wide_enough_data %>% mutate(row_names = paste0(gene, "-", variant)) %>% select(row_names)
+row.names(corr_matrix) <- row_names_df$row_names
+# corr_matrix[is.na(corr_matrix)] <- 0
+heatmap_p <- pheatmap(corr_matrix, scale = "none", fontsize=10)
+heatmap_p
+ggsave("sample_correlation_map.pdf", heatmap_p, units="in", width=10.5, height=7.5)
 

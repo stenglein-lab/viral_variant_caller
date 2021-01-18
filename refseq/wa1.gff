@@ -2,28 +2,28 @@
 ##source-version geneious 2020.2.2
 ##sequence-region	MN985325	1	29882
 MN985325	Geneious	source	1	29882	.	+	.	Name=5' end is primer sequence used source Severe acute respiratory syndrome coronavirus 2
-MN985325	Geneious	CDS	28274	29533	.	+	0	Name=N CDS
-MN985325	Geneious	CDS	25393	26220	.	+	0	Name=orf3a CDS
-MN985325	Geneious	CDS	26523	27191	.	+	0	Name=M CDS
-MN985325	Geneious	CDS	27394	27759	.	+	0	Name=orf7a CDS
-MN985325	Geneious	CDS	27894	28259	.	+	0	Name=orf8 CDS
-MN985325	Geneious	CDS	26245	26472	.	+	0	Name=E CDS
-MN985325	Geneious	CDS	27202	27387	.	+	0	Name=orf6 CDS
-MN985325	Geneious	CDS	29558	29674	.	+	0	Name=orf10 CDS
-MN985325	Geneious	gene	266	21555	.	+	.	Name=orf1ab gene
-MN985325	Geneious	gene	21563	25384	.	+	.	Name=S gene
-MN985325	Geneious	gene	28274	29533	.	+	.	Name=N gene
-MN985325	Geneious	gene	25393	26220	.	+	.	Name=orf3a gene
-MN985325	Geneious	gene	26523	27191	.	+	.	Name=M gene
-MN985325	Geneious	gene	27394	27759	.	+	.	Name=orf7a gene
-MN985325	Geneious	gene	27894	28259	.	+	.	Name=orf8 gene
-MN985325	Geneious	gene	26245	26472	.	+	.	Name=E gene
-MN985325	Geneious	gene	27202	27387	.	+	.	Name=orf6 gene
-MN985325	Geneious	gene	29558	29674	.	+	.	Name=orf10 gene
+MN985325	Geneious	CDS	28274	29533	.	+	0	Name=N
+MN985325	Geneious	CDS	25393	26220	.	+	0	Name=orf3a
+MN985325	Geneious	CDS	26523	27191	.	+	0	Name=M
+MN985325	Geneious	CDS	27394	27759	.	+	0	Name=orf7a
+MN985325	Geneious	CDS	27894	28259	.	+	0	Name=orf8
+MN985325	Geneious	CDS	26245	26472	.	+	0	Name=E
+MN985325	Geneious	CDS	27202	27387	.	+	0	Name=orf6
+MN985325	Geneious	CDS	29558	29674	.	+	0	Name=orf10
+MN985325	Geneious	gene	266	21555	.	+	.	Name=orf1ab
+MN985325	Geneious	gene	21563	25384	.	+	.	Name=S
+MN985325	Geneious	gene	28274	29533	.	+	.	Name=N
+MN985325	Geneious	gene	25393	26220	.	+	.	Name=orf3a
+MN985325	Geneious	gene	26523	27191	.	+	.	Name=M
+MN985325	Geneious	gene	27394	27759	.	+	.	Name=orf7a
+MN985325	Geneious	gene	27894	28259	.	+	.	Name=orf8
+MN985325	Geneious	gene	26245	26472	.	+	.	Name=E
+MN985325	Geneious	gene	27202	27387	.	+	.	Name=orf6
+MN985325	Geneious	gene	29558	29674	.	+	.	Name=orf10
 MN985325	Geneious	CDS	2720	8554	.	+	.	Name=nsp3
-MN985325	Geneious	CDS	21563	25384	.	+	0	Name=S CDS
-MN985325	Geneious	CDS	13442	13468	.	+	.	Name=nsp12;ID=njCU0WQQkzcTBd7WcISZax7J/vA.1598557460374.1
-MN985325	Geneious	CDS	13468	16236	.	+	.	Name=nsp12;ID=njCU0WQQkzcTBd7WcISZax7J/vA.1598557460374.1
+MN985325	Geneious	CDS	21563	25384	.	+	0	Name=S
+MN985325	Geneious	CDS	13442	13468	.	+	.	Name=nsp12
+MN985325	Geneious	CDS	13468	16236	.	+	.	Name=nsp12
 MN985325	Geneious	CDS	806	2719	.	+	.	Name=nsp2
 MN985325	Geneious	CDS	16237	18039	.	+	.	Name=nsp13
 MN985325	Geneious	CDS	18040	19620	.	+	.	Name=nsp14

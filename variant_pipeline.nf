@@ -66,8 +66,8 @@ params.skip_collapse_to_unique = true
 // cd-hit-dup cutoff for collapsing reads with >= this much fractional similarity
 params.duplicate_cutoff = "0.98"
 
-
-params.min_depth_for_variant_call="50"
+// min depth and allele freq for calling variants and indels
+params.min_depth_for_variant_call="30"
 params.min_allele_freq="0.03"
 
 
@@ -505,9 +505,9 @@ process call_snvs {
   lofreq call --no-default-filter -f ${params.refseq_fasta} -o ${input_bam}.pre_vcf ${input_bam}
 
   # call lofreq filter separately to avoid doing strand-bias filtering
-  # -v 40 --> requires minimum 40x coverage
+  # -v N --> requires minimum Nx coverage (e.g. 40 = call variants at positions with > 40x coverage)
   # -V 0 --> no coverage maximum
-  # -a 0.01 --> call variants above 1% (0.01 = min allele frequency)
+  # -a N --> call variants above fraction N (e.g. 0.01 = call variants with >1% allele freq)
   # -A 0 --> no maximum allele frequency
   lofreq filter -v ${params.min_depth_for_variant_call} -V 0 -a ${params.min_allele_freq} -A 0 --no-defaults -i  ${input_bam}.pre_vcf -o ${input_bam}.snv.vcf
   """
@@ -531,7 +531,9 @@ process call_indels {
   '''
   lofreq indelqual --dindel -f !{params.refseq_fasta} -o !{input_bam}.indelqual.bam !{input_bam}
 
-  lofreq call --call-indels --only-indels -f !{params.refseq_fasta} !{input_bam}.indelqual.bam > !{input_bam}.indel.vcf
+  lofreq call --no-default-filter --call-indels --only-indels -f !{params.refseq_fasta} !{input_bam}.indelqual.bam > !{input_bam}.indel.pre_vcf
+
+  lofreq filter -v !{params.min_depth_for_variant_call} -V 0 -a !{params.min_allele_freq} -A 0 --no-defaults -i  !{input_bam}.indel.pre_vcf -o !{input_bam}.indel.vcf
   '''
 }
 
@@ -560,9 +562,9 @@ process annotate_variants {
 }
 
 /*
- use SnpSift to extract SnpEff indel annotations
+ use SnpSift to extract SnpEff annotations
  */
-process extract_annotated_indel_variants {
+process extract_annotated_variants_fields {
   publishDir "${params.outdir}", mode:'link'
 
   input:
