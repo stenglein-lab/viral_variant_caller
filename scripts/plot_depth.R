@@ -26,7 +26,7 @@ if (!interactive()) {
 } else {
   # if running via RStudio
   r_bindir = "." 
-  depth_file_name = "results/all.depth"
+  depth_file_name = "../results/all.depth"
 }
 
 depth_df <- read.delim(depth_file_name, sep="\t", header=FALSE)

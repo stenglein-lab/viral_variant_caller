@@ -75,26 +75,16 @@ params.min_allele_freq="0.03"
 
 // TODO: check that appropriate refseq files exist (fasta, gff, etc.)
 
-// TODO: handle single end or paired end, possibly automatically
-
 // TODO: better control of concurrency in terms of processes
-
-// TODO: move scripts to a bin subdir
-
-// TODO: put all up on github
-
-// TODO: conda
 
 // TODO: BSQR fails in case of no mapping reads... deal with this possibility 
 
 /*
  These fastq files represent the main input to this workflow
 */
-// TODO: autodetect single end vs paired end
 Channel
     .fromFilePairs("${params.fastq_dir}/*_R{1,2}*.fastq", size: -1, checkIfExists: true, maxDepth: 1)
     .into {samples_ch_qc; samples_ch_trim}
-
 
 
 /*
@@ -343,7 +333,10 @@ process post_trim_multiqc {
   Use bowtie2 to remove host-derived reads
 */
 // TODO: make host filtering optional
-// TODO: switch to bwa for host filtering too?
+// TODO: switch to bwa for host filtering too?  The reason to use bowtie2 in
+//       instead of bwa is that it has convenient built-in options for 
+//       outputting unmapped reads (the --un or --un-conc) options, whereas
+//       for bwa you have to go through additional steps with samtools / bedtools 
 process host_filtering {
   // publishDir "${params.outdir}", pattern: "*_R1_fh.fastq"
   label 'highmem'                                                                
@@ -428,9 +421,11 @@ process bwa_align_to_refseq {
 
 
 /*
- This process uses gatk "Base Quality Score Recalibration" (BQSR)
- BQSR is "a data pre-processing step that detects systematic errors made by the sequencing machine when it estimates the accuracy of each base call."
- see: https://gatk.broadinstitute.org/hc/en-us/articles/360035890531-Base-Quality-Score-Recalibration-BQSR-
+ This process performs gatk "Base Quality Score Recalibration" (BQSR).
+ BQSR is "a data pre-processing step that detects systematic errors made by 
+ the sequencing machine when it estimates the accuracy of each base call."
+ see: 
+ https://gatk.broadinstitute.org/hc/en-us/articles/360035890531-Base-Quality-Score-Recalibration-BQSR-
 
  The use of this tool is recommended for downstream variant calling using lofreq
  see: https://csb5.github.io/lofreq/commands/
@@ -496,9 +491,6 @@ process call_snvs {
   tuple val(sample_id), path(input_bam) from post_bsqr_snv_ch
 
   output:
-  path("${sample_id}.variant_alleles.txt") into post_variant_call_ch
-  tuple val(sample_id), path("${sample_id}.variant_alleles.txt") into post_variant_call_prepend_ch
-  tuple val(sample_id), path(depth) optional true into post_variant_call_depth_ch
   tuple val(sample_id), path("${input_bam}.snv.vcf") into post_snv_call_ch
 
   script:
@@ -518,38 +510,8 @@ process call_snvs {
   # -a 0.01 --> call variants above 1% (0.01 = min allele frequency)
   # -A 0 --> no maximum allele frequency
   lofreq filter -v ${params.min_depth_for_variant_call} -V 0 -a ${params.min_allele_freq} -A 0 --no-defaults -i  ${input_bam}.pre_vcf -o ${input_bam}.snv.vcf
-  
-  # ----------------
-  # variant analysis
-  # ----------------
-  
-  # analyze variants will determine whether these are non synonymous or synonymous variants
-  # and identify the impacted CDS, etc.
-  # this uses a perl script to parse the lofreq vcf and output a table of variants
-  ${params.scripts_bindir}/analyze_variants ${params.refseq_gff} ${input_bam}.snv.vcf >  "${sample_id}.variant_alleles.txt"
-  
   """
 }
-
-/*
- tabulate snv calls for all datasets
-*/
-/*
-process tabulate_snvs {
-  publishDir "${params.outdir}", mode:'link'
-
-  input:
-  path(vcf) from post_snv_call_ch.collect()
-
-  output:
-  path("Single_nucleotide_variant_summary.xlsx") into post_snv_variant_tabulate_ch
-
-  script:
-  """
-  Rscript ${params.R_bindir}/analyze_snv_vcf.R $vcf
-  """
-}
-*/
 
 
 /*
@@ -563,8 +525,7 @@ process call_indels {
   tuple val(sample_id), path(input_bam) from post_bsqr_indel_ch
 
   output:
-  path("${input_bam}.indel.vcf") into post_indel_call_ch
-  tuple val(sample_id), path("${input_bam}.indel.vcf") into post_indel_call_snpeff_ch
+  tuple val(sample_id), path("${input_bam}.indel.vcf") into post_indel_call_ch
 
   shell:
   '''
@@ -574,59 +535,18 @@ process call_indels {
   '''
 }
 
-/*
- tabulate indel calls for all datasets
-*/
-// TODO: this failed in the case where there was a single variant in the vcf file...
-process tabulate_indel_variants {
-  publishDir "${params.outdir}", mode:'link'
-
-  input:
-  path(vcfs) from post_indel_call_ch.collect()
-
-  output:
-  path("Structural_variant_summary.xlsx") into post_indel_variant_tabulate_ch
-
-  script:
-  """
-  Rscript ${params.R_bindir}/analyze_indel_vcf.R ${params.R_bindir} $vcfs
-  """
-}
 
 /* 
- use snpEff to annotate indel vcfs
+ use snpEff to annotate vcfs 
  */
-process annotate_indel_variants {
+process annotate_variants {
   publishDir "${params.outdir}", mode:'link'
 
   input:
-  tuple val(sample_id), path(vcf) from post_indel_call_snpeff_ch
+  tuple val(sample_id), path(vcf) from post_indel_call_ch.concat(post_snv_call_ch)
 
   output:
-  tuple val(sample_id), path("${vcf}.snp_eff") into post_indel_annotate_ch
-
-  script:
-  """
-  snpEff ann -c ${params.snpeff_cfg} -dataDir ${params.snpeff_data} \
-    -no-downstream \
-    -no-upstream \
-    -no-intergenic \
-    -no-intron \
-    ${params.refseq_name} $vcf > ${vcf}.snp_eff
-  """
-}
-
-/* 
- use snpEff to annotate snvs
- */
-process annotate_snvs {
-  publishDir "${params.outdir}", mode:'link'
-
-  input:
-  tuple val(sample_id), path(vcf) from post_snv_call_ch
-
-  output:
-  tuple val(sample_id), path("${vcf}.snp_eff") into post_snv_annotate_ch
+  tuple val(sample_id), path("${vcf}.snp_eff") into post_variant_annotate_ch
 
   script:
   """
@@ -646,30 +566,10 @@ process extract_annotated_indel_variants {
   publishDir "${params.outdir}", mode:'link'
 
   input:
-  tuple val(sample_id), path(snp_eff) from post_indel_annotate_ch
-
-   output:
-  path("${snp_eff}.snp_sift") into indel_annotations_ch
-  tuple val(sample_id), path("${snp_eff}.snp_sift") into post_extract_indel_annotations_ch
-
-  script:
-  """
-  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].HGVS_P > ${snp_eff}.snp_sift
-  """
-}
-
-/*
- use SnpSift to extract SnpEff snv  annotations
- */
-process extract_annotated_snv_variants {
-  publishDir "${params.outdir}", mode:'link'
-
-  input:
-  tuple val(sample_id), path(snp_eff) from post_snv_annotate_ch
+  tuple val(sample_id), path(snp_eff) from post_variant_annotate_ch
 
   output:
-  path("${snp_eff}.snp_sift") into snv_annotations_ch
-  tuple val(sample_id), path("${snp_eff}.snp_sift") into post_extract_snv_annotations_ch
+  tuple val(sample_id), path("${snp_eff}.snp_sift") into post_snp_sift_ch
 
   script:
   """
@@ -678,56 +578,51 @@ process extract_annotated_snv_variants {
 }
 
 /*
- tabulate snpeff indel annotations for all datasets using snpsift output
+ This process prepends SnpSift info for all samples with the 
+ sample ID as a first column so it'll be tidy format for import into 
+ R and processing with tidyverse packages
 */
-process tabulate_snpeff_indel_variants {
+process prepend_snp_sift_output {
+  label 'lowmem'
   publishDir "${params.outdir}", mode:'link'
 
   input:
-  path(snp_sifts) from indel_annotations_ch.collect()
+  tuple val(sample_id), path(snp_sifts) from post_snp_sift_ch
+  .groupTuple() // group tuple here will merge the snv and indel variant files into a single one (using cat below)
 
   output:
-  path("Structural_variant_snpeff_summary.xlsx") into post_snpeff_indel_variant_tabulate_ch
+  path("${sample_id}.variants.tsv") optional true into post_prepend_snp_sift_ch
 
-  script:
-  """
-  Rscript ${params.R_bindir}/analyze_snpeff_indel.R ${params.R_bindir} $snp_sifts
-  """
+  shell:
+  '''
+  # grep: remove header lines (contain the text CHROM at beginning)
+  # awk: add a new first column w/ sample id
+  cat !{snp_sifts} | grep -v '^CHROM' | awk '{ print "!{sample_id}" "\t" $0; }' > "!{sample_id}.variants.tsv"
+  '''
 }
 
 /*
  tabulate snpeff snv annotations for all datasets using snpsift output
+
+ this will tabulate all SNV and indel variants together
 */
-process tabulate_snpeff_snvs {
+process tabulate_snpeff_variants {
   publishDir "${params.outdir}", mode:'link'
 
   input:
-  path(snp_sifts) from snv_annotations_ch.collect()
+  path(all_depth) from analyze_variants_depth_ch
+  path(snp_sifts) from post_prepend_snp_sift_ch.collect()
 
   output:
-  path("Single_nucleotide_variant_snpeff_summary.xlsx") into post_snpeff_snv_tabulate_ch
+  path("variant_summary.xlsx") into post_snpeff_snv_tabulate_ch
 
   script:
   """
-  Rscript ${params.R_bindir}/analyze_snpeff_snv.R ${params.R_bindir} $snp_sifts
-  """
-}
-
-/*
- tabulate variants for all datasets
-*/
-process tabulate_variants {
-  publishDir "${params.outdir}", mode:'link'
-
-  input:
-  path(variant_alleles) from post_variant_call_ch.collect()
-
-  output:
-  path("variant_table.txt") into post_variant_tabulate_ch
-
-  script:
-  """
-  ${params.scripts_bindir}/tabulate_variants $variant_alleles > variant_table.txt
+  Rscript ${params.R_bindir}/analyze_snpeff_variants.R ${params.R_bindir} \
+    ${params.min_allele_freq} \
+    $all_depth \
+    ${params.min_depth_for_variant_call} \
+    $snp_sifts
   """
 }
 
@@ -762,7 +657,7 @@ process tabulate_depth {
   path(depth_files) from post_prepend_depth_ch.collect()
 
   output: 
-  path("all.depth") 
+  path("all.depth") into analyze_variants_depth_ch
   path("coverage_plot.pdf") 
 
 
