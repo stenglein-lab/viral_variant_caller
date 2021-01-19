@@ -482,7 +482,11 @@ process call_dvgs {
   // -n number of supporting reads necessary
   // -l minimum length of dvg to report
   """
-  python3 ${params.ditector_script} ${params.refseq_fasta} $input_fastq -o "." -t DI -x 12 -p 0 -n 4 -l 0
+  # combined R1 and R2 if necessary
+  cat ${input_fastq[0]} ${input_fastq[1]} > ${sample_id}_R12_fh.fastq
+  
+  # run DI-tector
+  python3 ${params.ditector_script} ${params.refseq_fasta} ${sample_id}_R12_fh.fastq -o "." -t DI -x 12 -p 0 -n 4 -l 0
   """
 }
 
