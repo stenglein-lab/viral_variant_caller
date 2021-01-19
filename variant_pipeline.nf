@@ -463,11 +463,14 @@ process tabulate_depth {
 process call_dvgs {
   label 'lowmem'
 
-  when:
-  ${params.run_ditector} 
-
   input:
   tuple val(sample_id), path(input_fastq) from post_host_ch_dvg
+
+  // this will skip execution of dvg calling with di-tector unless
+  // this param is set to true
+  // this will also cause downstream processes to be skipped
+  when:
+  params.run_ditector
 
   output:
   tuple val(sample_id), path("DI_counts.txt") into post_dvg_call_ch
@@ -486,9 +489,6 @@ process call_dvgs {
 process process_dvg_calls {
   label 'lowmem'
   publishDir "${params.outdir}", mode:'link'
-
-  when:
-  ${params.run_ditector} 
 
   input:
   tuple val(sample_id), path(di_counts) from post_dvg_call_ch
@@ -510,9 +510,6 @@ process process_dvg_calls {
 process tabulate_dvg_calls {
   label 'lowmem'
   publishDir "${params.outdir}", mode:'link'
-
-  when:
-  ${params.run_ditector} 
 
   input:
   path(all_depth) from tabulate_dvg_depth_ch
