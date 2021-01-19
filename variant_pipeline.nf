@@ -39,7 +39,7 @@ params.host_bt_threads = "8"
 
 // SARS-CoV-2 wa1 refseq, or a reference seq of your choosing
 params.refseq_dir = "${baseDir}/refseq/"
-params.refseq_name = "wa1"
+params.refseq_name = "rvfv_csu"
 params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
 params.refseq_gff = "${params.refseq_dir}/${params.refseq_name}.gff"
 params.refseq_bt_index = "${params.refseq_dir}/${params.refseq_name}"
@@ -51,6 +51,9 @@ params.refseq_bwa_threads = "8"
 // where are R scripts found...
 params.R_bindir="${baseDir}/scripts"
 params.scripts_bindir="${baseDir}/scripts"
+
+// DI-tector info
+params.ditector_script="${params.scripts_bindir}/DI-tector_06.py"
 
 // conda for snpEFF
 params.snpeff_cfg = "${params.refseq_dir}/snpEff.config" 
@@ -67,7 +70,7 @@ params.skip_collapse_to_unique = true
 params.duplicate_cutoff = "0.98"
 
 
-params.min_depth_for_variant_call="50"
+params.min_depth_for_variant_call="40"
 params.min_allele_freq="0.03"
 
 
@@ -346,6 +349,7 @@ process host_filtering {
 
   output:
   tuple val(sample_id), path("*_fh.fastq") optional true into post_host_ch_variants
+  tuple val(sample_id), path("*_fh.fastq") optional true into post_host_ch_dvg
   // TODO: count
   // TODO: multiqc analysis of bowtie output (host filtering)
 
@@ -479,6 +483,114 @@ process tabulate_depth_one {
   """
 }
 
+/*
+ This process prepends coverage depth info for all samples with the 
+ sample ID as a first colum so it'll be tidy format for import into 
+ R and processing with tidyverse packages
+*/
+process prepend_depth {
+  label 'lowmem'
+
+  input:
+  tuple val(sample_id), path(depth) from post_depth_ch
+
+  output:
+  path("${sample_id}_prepended_depth") optional true into post_prepend_depth_ch
+
+  shell:
+  '''
+  cat !{depth} | awk '{ print "!{sample_id}" "\t" $0; }' > "!{sample_id}_prepended_depth"
+  '''
+}
+
+/*
+ This process concatenates all the depth files 
+ into a single file using the collectFile operator
+*/
+process tabulate_depth {
+  publishDir "${params.outdir}", mode:'link'
+
+  input: 
+  path(depth_files) from post_prepend_depth_ch.collect()
+
+  output: 
+  path("all.depth") into tabulate_dvg_depth_ch
+  path("all.depth") into analyze_variants_depth_ch
+  path("coverage_plot.pdf") 
+
+
+  script:
+  """
+  cat $depth_files > all.depth
+  Rscript ${params.R_bindir}/plot_depth.R ${params.R_bindir} all.depth
+  """
+}
+
+
+
+/*
+ Call DIs using DI-tector
+*/
+process call_dvgs {
+  label 'lowmem'
+
+  input:
+  tuple val(sample_id), path(input_fastq) from post_host_ch_dvg
+
+  output:
+  tuple val(sample_id), path("DI_counts.txt") into post_dvg_call_ch
+
+  script:
+  // TODO: parameterize
+  // -x threads
+  // -p polarity (+/- sense: for calling something 5' or 3' SB
+  // -n number of supporting reads necessary
+  // -l minimum length of dvg to report
+  """
+  python3 ${params.ditector_script} ${params.refseq_fasta} $input_fastq -o "." -t DI -x 12 -p 0 -n 4 -l 0
+  """
+}
+
+process process_dvg_calls {
+  label 'lowmem'
+  publishDir "${params.outdir}", mode:'link'
+
+  input:
+  tuple val(sample_id), path(di_counts) from post_dvg_call_ch
+
+  output:
+  path("${sample_id}_di_counts.txt") into post_dvg_process_ch
+
+  // in the following 'shell' code block, 
+  // !{} will be expanded with the values of variables in the nextflow context, and
+  // ${} will be left alone to be used as bash variables (nextflow doesn't expand: leaves for bash)
+  //
+  // see: https://www.nextflow.io/docs/latest/process.html#shell
+  shell:
+  '''
+  cat !{di_counts} | grep 'DVG' | grep -v -e "^=" -e "DVG's" | awk '{ print "!{sample_id}" "\t" $0; }'  > "!{sample_id}_di_counts.txt"
+  '''
+}
+
+process tabulate_dvg_calls {
+  label 'lowmem'
+  publishDir "${params.outdir}", mode:'link'
+
+  input:
+  path(all_depth) from tabulate_dvg_depth_ch
+  path(di_count_files) from post_dvg_process_ch.collect()
+
+  output:
+  path("dvg_summary.xlsx") optional true
+
+  script:
+  """
+  Rscript ${params.R_bindir}/process_ditector_output.R ${params.R_bindir} \
+    $all_depth \
+    $di_count_files
+  """
+}
+
 
 /*
  Call SNVs using lofreq
@@ -599,48 +711,6 @@ process prepend_snp_sift_output {
   # awk: add a new first column w/ sample id
   cat !{snp_sifts} | grep -v '^CHROM' | awk '{ print "!{sample_id}" "\t" $0; }' > "!{sample_id}.variants.tsv"
   '''
-}
-
-/*
- This process prepends coverage depth info for all samples with the 
- sample ID as a first colum so it'll be tidy format for import into 
- R and processing with tidyverse packages
-*/
-process prepend_depth {
-  label 'lowmem'
-
-  input:
-  tuple val(sample_id), path(depth) from post_depth_ch
-
-  output:
-  path("${sample_id}_prepended_depth") optional true into post_prepend_depth_ch
-
-  shell:
-  '''
-  cat !{depth} | awk '{ print "!{sample_id}" "\t" $0; }' > "!{sample_id}_prepended_depth"
-  '''
-}
-
-/*
- This process concatenates all the depth files 
- into a single file using the collectFile operator
-*/
-process tabulate_depth {
-  publishDir "${params.outdir}", mode:'link'
-
-  input: 
-  path(depth_files) from post_prepend_depth_ch.collect()
-
-  output: 
-  path("all.depth") into analyze_variants_depth_ch
-  path("coverage_plot.pdf") 
-
-
-  script:
-  """
-  cat $depth_files > all.depth
-  Rscript ${params.R_bindir}/plot_depth.R ${params.R_bindir} all.depth
-  """
 }
 
 

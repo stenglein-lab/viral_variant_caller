@@ -238,7 +238,7 @@ df_wide_enough_data <-
               names_from=sample_id, 
               values_from=frequency,
               names_sort = T) %>%
-  arrange(position)
+  arrange(reference_sequence, position)
 
 # these values describe the # of header rows and columns in the big wide data table
 num_header_row = 1 
@@ -274,7 +274,7 @@ all_cell_style <- createStyle(
 addStyle(wb=wb, sheet="variants", 
         style=all_cell_style,
         cols = num_header_col+1:ncol(df_wide_enough_data),
-        rows = 2:nrow(df_wide_enough_data),
+        rows = 2:nrow(df_wide_enough_data)+1,
         gridExpand = T
 )
 
@@ -315,7 +315,8 @@ freezePane(wb, "variants", firstActiveRow = num_header_row+1, firstActiveCol = n
 # ?conditionalFormatting
 conditionalFormatting(wb=wb, sheet="variants", 
                       "colourScale",
-                      cols = num_header_col+1:ncol(df_wide_enough_data), rows = num_header_row+1:nrow(df_wide_enough_data),
+                      cols = num_header_col+1:ncol(df_wide_enough_data), 
+							 rows = num_header_row+1:nrow(df_wide_enough_data),
                       style = c("white", "green"),
                       rule = c(0, 1),
                       type = "colourScale"
