@@ -1,4 +1,3 @@
 #!/bin/bash 
 
-
 nextflow run variant_pipeline.nf -resume -with-report -with-dag flowchart.pdf

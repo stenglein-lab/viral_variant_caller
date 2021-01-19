@@ -41,7 +41,7 @@ params.host_bt_threads = "8"
 
 // SARS-CoV-2 wa1 refseq, or a reference seq of your choosing
 params.refseq_dir = "${baseDir}/refseq/"
-params.refseq_name = "rvfv_csu"
+params.refseq_name = "wa1"
 params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
 params.refseq_gff = "${params.refseq_dir}/${params.refseq_name}.gff"
 params.refseq_bt_index = "${params.refseq_dir}/${params.refseq_name}"
@@ -642,7 +642,7 @@ process extract_annotated_variant_fields {
 */
 process prepend_snp_sift_output {
   label 'lowmem'
-  publishDir "${params.outdir}", mode:'link'
+  publishDir "${params.vcf_out_dir}", mode:'link'
 
   input:
   tuple val(sample_id), path(snp_sifts) from post_snp_sift_ch
