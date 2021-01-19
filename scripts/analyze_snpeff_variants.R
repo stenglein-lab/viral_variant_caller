@@ -239,7 +239,7 @@ df_wide_enough_data <-
               names_from=sample_id, 
               values_from=frequency,
               names_sort = T) %>%
-  arrange(position)
+  arrange(reference_sequence, position)
 
 # these values describe the # of header rows and columns in the big wide data table
 num_header_row = 1 
@@ -359,5 +359,5 @@ row.names(corr_matrix) <- row_names_df$row_names
 corr_matrix[is.na(corr_matrix)] <- 0
 heatmap_p <- pheatmap(corr_matrix, scale = "none", fontsize=10)
 heatmap_p
-ggsave("sample_correlation_map.pdf", heatmap_p, units="in", width=10.5, height=7.5)
+ggsave(paste0(output_director, "sample_correlation_heatmap.pdf"), heatmap_p, units="in", width=10.5, height=7.5)
 

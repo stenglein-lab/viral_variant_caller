@@ -17,5 +17,5 @@ dependencies:
   - r-base=4.0.*
   - r-tidyverse=1.3.*
   - r-openxlsx=4.2.* 
-  - r-pheatmap=1.0.*
+  - r-vcfr=1.12.*
   - snpsift=4.3.*
