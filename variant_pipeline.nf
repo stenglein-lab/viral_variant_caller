@@ -16,9 +16,11 @@ params.fastq_dir = "$baseDir/fastq/"
 params.outdir = "$baseDir/results"                                                       
 params.initial_fastqc_dir = "${params.outdir}/initial_fastqc/" 
 params.post_trim_fastqc_dir = "${params.outdir}/post_trim_fastqc/" 
+params.counts_out_dir = "${params.outdir}/fastq_counts/"                        
 params.fastq_out_dir = "${params.outdir}/trimmed_fastq/"                        
 params.bam_out_dir = "${params.outdir}/bam/"                                    
 params.vcf_out_dir = "${params.outdir}/vcf/"  
+params.ditector_out_dir = "${params.outdir}/ditector/"  
 
 // ------------------
 // Trimming settings
@@ -56,6 +58,7 @@ params.scripts_bindir="${baseDir}/scripts"
 
 // DI-tector info
 params.ditector_script="${params.scripts_bindir}/DI-tector_06.py"
+params.run_ditector = true
 
 // conda for snpEFF
 params.snpeff_cfg = "${params.refseq_dir}/snpEff.config" 
@@ -75,7 +78,6 @@ params.duplicate_cutoff = "0.98"
 params.min_depth_for_variant_call="40"
 params.min_allele_freq="0.03"
 
-params.run_ditector = false
 
 
 // TODO: command line arg processing and validating 
@@ -91,7 +93,7 @@ params.run_ditector = false
 */
 Channel
     .fromFilePairs("${params.fastq_dir}/*_R{1,2}*.fastq", size: -1, checkIfExists: true, maxDepth: 1)
-    .into {samples_ch_qc; samples_ch_trim}
+    .into {samples_ch_qc; samples_ch_trim; samples_ch_count}
 
 
 /*
@@ -165,6 +167,30 @@ process initial_qc {
   """
 }
 
+/*
+ Count initial fastq
+*/
+process initial_fastq_count {
+  label 'lowmem'                                                                
+  publishDir "${params.counts_out_dir}", mode:'link'
+
+  input:
+  tuple val(sample_id), path(initial_fastq) from samples_ch_count
+
+  output:
+  path("${sample_id}_initial_count.txt") into post_count_initial_ch
+
+  shell:
+  // only count the first file because for paired-read data both files
+  // will have the same # of reads.
+
+  // for an explanation of the xargs command used for arithmetic in a pipe, see: 
+  // https://askubuntu.com/questions/1203063/how-can-i-pipe-the-result-of-the-wc-command-into-an-arithmetic-expansion
+  '''
+  cat !{initial_fastq[0]} | wc -l | xargs bash -c 'echo $(($0 / 4))' | awk '{print "!{sample_id}" "\tinitial\t" $1}' > "!{sample_id}_initial_count.txt"
+  '''
+}
+
 /* 
 Collect and compress all raw fastq files --> deliverables
 */
@@ -199,12 +225,11 @@ process trim_adapters_and_low_quality {
   tuple val(sample_id), path(initial_fastq) from samples_ch_trim
 
   output:
-  // TODO: count
-  // TODO: multiqc trimming report
   tuple val(sample_id), path("*_f.fastq") optional true into post_trim_qc_ch
   tuple val(sample_id), path("*_f.fastq") optional true into post_trim_ch
+  tuple val(sample_id), path("*_f.fastq") optional true into post_trim_count_ch
 
-  // TODO: put adapters as a param
+  // TODO: put adapters as a param (?)
   script:
 
   // this handles paired-end data, in which case must specify a paired output file
@@ -227,6 +252,27 @@ process trim_adapters_and_low_quality {
    $initial_fastq 
   """
 
+}
+
+/*
+ Count post-trimming fastq
+*/
+process trimmed_fastq_count {
+  label 'lowmem'                                                                
+  publishDir "${params.counts_out_dir}", mode:'link'
+
+  input:
+  tuple val(sample_id), path(trimmed_fastq) from post_trim_count_ch
+
+  output:
+  path("${sample_id}_trimmed_count.txt") into post_count_trim_ch
+
+  shell:
+  // only count the first file because for paired-read data both files
+  // will have the same # of reads.
+  '''
+  cat !{trimmed_fastq[0]} | wc -l | xargs bash -c 'echo $(($0 / 4))' |  awk '{print "!{sample_id}" "\tpost_trimming\t" $1}' > "!{sample_id}_trimmed_count.txt"
+  '''
 }
 
 /*
@@ -280,12 +326,15 @@ process host_filtering {
 
   input:
   tuple val(sample_id), path(input_fastq) from post_trim_ch
+  val("indexes_complete") from post_index_setup_ch
 
   output:
   tuple val(sample_id), path("*_fh.fastq") optional true into post_host_ch_variants
   tuple val(sample_id), path("*_fh.fastq") optional true into post_host_ch_dvg
-  // TODO: count
-  // TODO: multiqc analysis of bowtie output (host filtering)
+  tuple val(sample_id), path("*_fh.fastq") optional true into post_host_ch_count
+
+
+  // TODO: multiqc analysis of bowtie output (host filtering) (?)
 
   script:
 
@@ -306,6 +355,28 @@ process host_filtering {
   -p "${params.host_bt_threads}" \
   $bowtie_file_output 2> "${sample_id}.host_filtering_bt.log" > /dev/null 
   """
+}
+
+
+/*
+ Count post-host-filtering fastq
+*/
+process host_filtered_fastq_count {
+  label 'lowmem'                                                                
+  publishDir "${params.counts_out_dir}", mode:'link'
+
+  input:
+  tuple val(sample_id), path(filtered_fastq) from post_host_ch_count
+
+  output:
+  path("${sample_id}_host_filtered_count.txt") into post_count_host_ch
+
+  shell:
+  // only count the first file because for paired-read data both files
+  // will have the same # of reads.
+  '''
+  cat !{filtered_fastq[0]} | wc -l | xargs bash -c 'echo $(($0 / 4))' |  awk '{print "!{sample_id}" "\tpost_host_filtered\t" $1}' > "!{sample_id}_host_filtered_count.txt"
+  '''
 }
 
 /* 
@@ -356,7 +427,6 @@ process bwa_align_to_refseq {
   '''
 }
 
-
 /*
  This process performs gatk "Base Quality Score Recalibration" (BQSR).
  BQSR is "a data pre-processing step that detects systematic errors made by 
@@ -376,12 +446,12 @@ process apply_bsqr {
   tuple val(sample_id), path(input_bam) from post_bwa_align_ch
   // this input value will prevent this process from running before the 
   // appropriate indexes are setup by the setup_indexes process 
-  val("indexes_complete") from post_index_setup_ch
 
   output:
   tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_snv_ch
   tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_depth_ch
   tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_indel_ch
+  tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_count_ch
 
   """
   gatk BaseRecalibrator \
@@ -396,6 +466,44 @@ process apply_bsqr {
      --bqsr-recal-file recalibration.table \
      -O ${sample_id}.${params.refseq_name}.bam
   """
+}
+
+
+/*
+ Count # of reads aligned to refseq
+*/
+process refseq_aligned_read_count {
+  label 'lowmem'                                                                
+  publishDir "${params.counts_out_dir}", mode:'link'
+
+  input:
+  tuple val(sample_id), path(bam) from post_bsqr_count_ch
+
+  output:
+  path("${sample_id}_refseq_aligned_count.txt") into post_count_refseq_aligned_ch
+
+  shell:
+  // See: http://www.metagenomics.wiki/tools/samtools/number-of-reads-in-bam-file
+  // for an explanation of what -F 2436 means in the samtools command.  
+  //
+  // 2436 is the sum of the following bitwise flags:
+  // any alignment with any of these will be excluded:
+  // 
+  //  4     unmapped read
+  //  128   second in pair 
+  //  256   not primary alignment
+  //  2048  supplementary alignment
+  //  ----
+  //  2436  sum of above
+  //
+  // Basically, we are counting reads that are mapped to the viral refseq
+  // We are *not* counting paired reads (aligned R2) because previous fastq counts 
+  // only count R1 reads , so for all paired-read data, counts are reported 
+  // consistetnely in terms of read pairs and not total reads.  
+  //
+  '''
+  samtools view -S !{bam} -F 2436 | wc -l | awk '{print "!{sample_id}" "\trefseq_aligned\t" $1}' > "!{sample_id}_refseq_aligned_count.txt"
+  '''
 }
 
 /*
@@ -476,7 +584,8 @@ process call_dvgs {
   params.run_ditector
 
   output:
-  tuple val(sample_id), path("DI_counts.txt") into post_dvg_call_ch
+  // TODO: DI-tector fails when no reads: check for this?
+  tuple val(sample_id), path("DI_counts.txt") optional true into post_dvg_call_ch
 
   script:
   // TODO: parameterize
@@ -495,7 +604,7 @@ process call_dvgs {
 
 process process_dvg_calls {
   label 'lowmem'
-  publishDir "${params.outdir}", mode:'link'
+  publishDir "${params.ditector_out_dir}", mode:'link'
 
   input:
   tuple val(sample_id), path(di_counts) from post_dvg_call_ch
@@ -673,7 +782,8 @@ process tabulate_snpeff_variants {
   path(snp_sifts) from post_prepend_snp_sift_ch.collect()
 
   output:
-  path("variant_summary.xlsx") into post_snpeff_snv_tabulate_ch
+  path("variant_summary.xlsx") 
+  path("sample_correlation_heatmap.pdf") 
 
   script:
   """
@@ -686,21 +796,18 @@ process tabulate_snpeff_variants {
 }
 
 
-
-
-/*
-process count_fastq {
+process tabulate_fastq_counts {
   publishDir "${params.outdir}", mode: 'link'
 
   input:
-  path(di_counts) from post_di_tabulate_ch
+  path(all_count_files) from post_count_initial_ch.concat(post_count_trim_ch, post_count_host_ch, post_count_refseq_aligned_ch).collect()
 
   output:
-  path ("fastq_counts.txt") 
+  path ("all_read_counts.txt") 
+  path ("filtering_plots.pdf") 
 
   script:
   """
-  $basedDir/count_all_fastq > fastq_counts.txt
+  Rscript ${params.R_bindir}/process_fastq_counts.R ${params.R_bindir} ${all_count_files}
   """
 }
-*/

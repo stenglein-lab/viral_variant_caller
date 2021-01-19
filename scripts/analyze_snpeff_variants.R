@@ -359,5 +359,5 @@ row.names(corr_matrix) <- row_names_df$row_names
 corr_matrix[is.na(corr_matrix)] <- 0
 heatmap_p <- pheatmap(corr_matrix, scale = "none", fontsize=10)
 heatmap_p
-ggsave(paste0(output_director, "sample_correlation_heatmap.pdf"), heatmap_p, units="in", width=10.5, height=7.5)
+ggsave(paste0(output_directory, "sample_correlation_heatmap.pdf"), heatmap_p, units="in", width=10.5, height=7.5)
 
