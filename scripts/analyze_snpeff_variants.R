@@ -356,7 +356,7 @@ corr_matrix <- as.matrix(df_wide_enough_data %>% select(-reference_sequence, -po
                                                         -effect) %>% filter())
 row_names_df <- df_wide_enough_data %>% mutate(row_names = paste0(gene, "-", variant)) %>% select(row_names)
 row.names(corr_matrix) <- row_names_df$row_names
-# corr_matrix[is.na(corr_matrix)] <- 0
+corr_matrix[is.na(corr_matrix)] <- 0
 heatmap_p <- pheatmap(corr_matrix, scale = "none", fontsize=10)
 heatmap_p
 ggsave("sample_correlation_map.pdf", heatmap_p, units="in", width=10.5, height=7.5)

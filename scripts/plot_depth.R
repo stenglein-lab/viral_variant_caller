@@ -33,9 +33,8 @@ depth_df <- read.delim(depth_file_name, sep="\t", header=FALSE)
 colnames(depth_df) <- c("dataset", "virus", "position", "depth")
 
 # rename datasets 
-
-source(paste0(r_bindir, "/process_dataset_names.R"))
-depth_df <- process_dataset_names(depth_df)
+# source(paste0(r_bindir, "/process_dataset_names.R"))
+# depth_df <- process_dataset_names(depth_df)
 
 # calculated median depth of (total) coverage for each virus in each dataset and store it in a new df
 median_depths <- depth_df %>% group_by(dataset, virus) %>% summarize(median_depth = median(depth))
