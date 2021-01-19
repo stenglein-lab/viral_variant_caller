@@ -73,6 +73,8 @@ params.duplicate_cutoff = "0.98"
 params.min_depth_for_variant_call="40"
 params.min_allele_freq="0.03"
 
+params.run_ditector = false
+
 
 // TODO: command line arg processing and validating 
 
@@ -152,7 +154,6 @@ process initial_qc {
 
   output:
   val(sample_id) into post_initial_qc_ch
-  val(sample_id) into write_datasets_ch
   // TODO: count
 
   script:
@@ -184,28 +185,6 @@ process initial_multiqc {
   multiqc -n "initial_qc_report.html" -m fastqc ${params.initial_fastqc_dir}
   """
 }
-
-/*
- Write all the sample IDs to a file
-*/
-/*
-// TODO: fix
-process write_ids {
-
-  input:
-  val(sample_ids) from write_datasets_ch.collect()
-
-  exec:
-  filename="${params.outdir}/dataset_ids.txt"
-  // delete if exists
-  new File(filename).delete()  
-  File file = new File(filename)
-  sample_ids.each {
-    file.append("${it}\n")
-  }
-  println file.text
-}
-*/
 
 /*
  Use cutadapt to trim off adapters and low quality bases
@@ -247,53 +226,6 @@ process trim_adapters_and_low_quality {
   """
 
 }
-
-//
-// The code below enables optional collapsing of non-unique reads using cd-hit
-// 
-// For a discussion of conditional execution in nextflow, see
-// https://nextflow-io.github.io/patterns/index.html#_conditional_process_executions
-//
-// (This pattern is from there)
-//
-// TODO: this is not working...
-//
-/*
-(post_trim_ch, post_collapse_ch) = ( params.skip_collapse_to_unique
-                                     ? [Channel.empty(), post_trim_optional_ch]
-                                     : [post_trim_optional_ch, Channel.empty()] )
-*/
-
-/*
-(post_trim_qc_ch, post_collapse_qc_ch) = ( params.skip_collapse_to_unique
-                                         ? [Channel.empty(), post_trim_optional_qc_ch]
-                                         : [post_trim_optional_qc_ch, Channel.empty()] )
-*/
-
-/*
- Use cd-hit to collapse duplicate reads
-*/
-/*
-process collapse_to_unique {
-  // publishDir "${params.outdir}"
-  label 'lowmem'                                                                
-
-  input:
-  // post_trim_ch will be empty if params.skip_collapse_to_unique is true,   
-  // in which case, this process will not run...
-  tuple val(sample_id), path(r1_fastq), path(r2_fastq) from post_trim_ch
-
-  output:
-  // TODO: count
-  tuple val(sample_id), path("${sample_id}_R1_fu.fastq"), path("${sample_id}_R2_fu.fastq") into post_collapse_qc_ch
-  tuple val(sample_id), path("${sample_id}_R1_fu.fastq"), path("${sample_id}_R2_fu.fastq") into post_collapse_ch
-
-  script:
-  """
-  cd-hit-dup -i ${r1_fastq} -o2 ${r2_fastq} -o ${sample_id}_R1_fu.fastq -o2 ${sample_id}_R2_fu.fastq -e ${params.duplicate_cutoff} 
-  """
-}
-*/
 
 /*
  Use fastqc to do QC on post-trimmed fastq
@@ -393,7 +325,6 @@ process bwa_align_to_refseq {
 
   output:
   tuple val(sample_id), path("${sample_id}.bam") into post_bwa_align_ch
-  tuple val(sample_id), path("${sample_id}.bam") into post_bwa_align_depth_ch
 
 
   // in the following 'shell' code block, 
@@ -526,13 +457,14 @@ process tabulate_depth {
   """
 }
 
-
-
 /*
  Call DIs using DI-tector
 */
 process call_dvgs {
   label 'lowmem'
+
+  when:
+  ${params.run_ditector} 
 
   input:
   tuple val(sample_id), path(input_fastq) from post_host_ch_dvg
@@ -555,6 +487,9 @@ process process_dvg_calls {
   label 'lowmem'
   publishDir "${params.outdir}", mode:'link'
 
+  when:
+  ${params.run_ditector} 
+
   input:
   tuple val(sample_id), path(di_counts) from post_dvg_call_ch
 
@@ -575,6 +510,9 @@ process process_dvg_calls {
 process tabulate_dvg_calls {
   label 'lowmem'
   publishDir "${params.outdir}", mode:'link'
+
+  when:
+  ${params.run_ditector} 
 
   input:
   path(all_depth) from tabulate_dvg_depth_ch
