@@ -593,10 +593,15 @@ process call_dvgs {
   // -p polarity (+/- sense: for calling something 5' or 3' SB
   // -n number of supporting reads necessary
   // -l minimum length of dvg to report
+
+  // handle single end or paired data
+  def r1 = input_fastq[0]
+  def r2 = input_fastq[1] ? input_fastq[1] : ""
+
   """
   # combined R1 and R2 if necessary
-  cat ${input_fastq[0]} ${input_fastq[1]} > ${sample_id}_R12_fh.fastq
-  
+  cat $r1 $r2 > ${sample_id}_R12_fh.fastq
+
   # run DI-tector
   python3 ${params.ditector_script} ${params.refseq_fasta} ${sample_id}_R12_fh.fastq -o "." -t DI -x 12 -p 0 -n 4 -l 0
   """
