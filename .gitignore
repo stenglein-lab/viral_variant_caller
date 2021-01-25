@@ -8,5 +8,5 @@ refseq/snpeff*
 results/
 work/
 refseq/*.idx
-flowchart.pdf
-report.html
+flowchart.pdf*
+report.html*

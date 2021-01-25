@@ -22,9 +22,9 @@ if (!interactive()) {
   
   # snp sift file names passed as command line arguments
   r_bindir=args[1]
-  min_allele_freq = args[2]
+  min_allele_freq = as.numeric(args[2])
   depth_file = args[3]
-  min_depth_to_call_variant = args[4]
+  min_depth_to_call_variant = as.numeric(args[4])
   # -c(1:4) --> all but the first four element of the list
   snp_sifts = args[-c(1:4)]
   output_directory="./"
@@ -34,12 +34,27 @@ if (!interactive()) {
   min_allele_freq = 0.03
   depth_file = "../results/all.depth"
   min_depth_to_call_variant = 40
-  snp_sifts = list.files(path = "../results", pattern = "*.variants.tsv$", full.names = T)
+  snp_sifts = list.files(path = "../results/vcf/", pattern = "*.variants.tsv$", full.names = T)
   output_directory="../results/"
+}
+
+verbosity_level <- 3
+ 
+# debugging
+if (verbosity_level == 3) {
+  writeLines(paste0(
+    "min_allele_freq: ", min_allele_freq, "\n",
+    "depth_file: ", depth_file, "\n",
+    "min_depth_to_call_variant: ", min_depth_to_call_variant, "\n"),
+    "params.txt")
+  
+  writeLines(snp_sifts, "snp_sifts.txt")
+  
+  writeLines(capture.output(sessionInfo()), "sessionInfo.txt")
 }
   
 # read in coverage depth info for all datasets
-depth_df <- read.delim(depth_file, sep="\t", header=FALSE)
+depth_df <- read.delim(depth_file, sep="\t", header=FALSE, stringsAsFactors = F)
 colnames(depth_df) <- c("sample_id", "reference_sequence", "position", "depth")
 
 # replace NA depth values with 0, since no depth called means 0 depth of coverage.
@@ -177,12 +192,14 @@ freq_complete_with_depth <- left_join(freq_complete, depth_df, by=c("sample_id",
 #
 
 # how similar?
-freq_complete_with_depth %>% filter(!is.na(depth.x)) %>% ggplot() +
-  geom_point(aes(x=depth.x, y=depth.y)) + theme_bw() +
-  xlab("Depth from lofreq") +
-  ylab("Depth from bwa") + 
-  scale_y_log10() +
-  scale_x_log10()
+if (interactive()) {
+  freq_complete_with_depth %>% filter(!is.na(depth.x)) %>% ggplot() +
+    geom_point(aes(x=depth.x, y=depth.y)) + theme_bw() +
+    xlab("Depth from lofreq") +
+    ylab("Depth from bwa") + 
+    scale_y_log10() +
+    scale_x_log10()
+}
 
 # plotting confirms they are similar enough to drop one: we'll drop the one from lofreq
 # because we actually only have depth from lofreq for positions with called variants
@@ -204,6 +221,7 @@ freq_complete_with_depth <- freq_complete_with_depth %>%
     (depth > min_depth_to_call_variant) ~ 0.0,
     TRUE ~ NA_real_
   ))
+
 
 # calculate median depth 
 freq_complete_with_depth %>% group_by(sample_id, variant_key) %>% mutate(median_depth = median(depth), .groups="drop")
@@ -245,6 +263,7 @@ df_wide_enough_data <-
 num_header_row = 1 
 num_header_col = 8 
 
+
 # TODO: Merge in dataset metadata and add to top of table
 
 # ----------------------------
@@ -265,7 +284,7 @@ writeData(wb, "variants", df_wide_enough_data, borders="all")
 all_cell_style <- createStyle( 
   fontName = "Helvetica",
   fontSize = 11,
-  numFmt = "PERCENTAGE",
+  numFmt = "0.00",
   border = "TopBottomLeftRight",
   borderColour = getOption("openxlsx.borderColour", "grey"),
   borderStyle = getOption("openxlsx.borderStyle", "thin"),
@@ -275,7 +294,7 @@ all_cell_style <- createStyle(
 addStyle(wb=wb, sheet="variants", 
         style=all_cell_style,
         cols = num_header_col:ncol(df_wide_enough_data)+1,
-        rows = 2:nrow(df_wide_enough_data)+1,
+        rows = 1:nrow(df_wide_enough_data)+1,
         gridExpand = T
 )
 
@@ -304,7 +323,7 @@ addStyle(wb=wb, sheet="variants",
 # style header row
 addStyle(wb=wb, sheet="variants", 
         style=row_header_style,
-        cols = 1:nrow(df_wide_enough_data),
+        cols = 1:ncol(df_wide_enough_data),
         rows = 1:num_header_row,
         gridExpand = T
 )
@@ -317,7 +336,7 @@ freezePane(wb, "variants", firstActiveRow = num_header_row+1, firstActiveCol = n
 conditionalFormatting(wb=wb, sheet="variants", 
                       "colourScale",
                       cols = num_header_col:ncol(df_wide_enough_data)+1, 
-                      rows = num_header_row+1:nrow(df_wide_enough_data)+1,
+                      rows = num_header_row:nrow(df_wide_enough_data)+1,
                       style = c("white", "green"),
                       rule = c(0, 1),
                       type = "colourScale"
