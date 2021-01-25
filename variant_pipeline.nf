@@ -151,7 +151,7 @@ process setup_indexes {
  Run fastqc on input fastq 
 */
 process initial_qc {
-  label 'lowmem'                                                                
+  label 'lowmem_non_threaded'                                                                
 
   input:
   tuple val(sample_id), path(initial_fastq) from samples_ch_qc
@@ -171,7 +171,7 @@ process initial_qc {
  Count initial fastq
 */
 process initial_fastq_count {
-  label 'lowmem'                                                                
+  label 'lowmem_non_threaded'                                                                
   publishDir "${params.counts_out_dir}", mode:'link'
 
   input:
@@ -219,7 +219,7 @@ process initial_multiqc {
 */
 process trim_adapters_and_low_quality {
   // publishDir "${params.outdir}"
-  label 'lowmem'                                                                
+  label 'lowmem_non_threaded'                                                                
 
   input:
   tuple val(sample_id), path(initial_fastq) from samples_ch_trim
@@ -258,7 +258,7 @@ process trim_adapters_and_low_quality {
  Count post-trimming fastq
 */
 process trimmed_fastq_count {
-  label 'lowmem'                                                                
+  label 'lowmem_non_threaded'                                                                
   publishDir "${params.counts_out_dir}", mode:'link'
 
   input:
@@ -279,7 +279,7 @@ process trimmed_fastq_count {
  Use fastqc to do QC on post-trimmed fastq
 */
 process post_trim_qc {
-  label 'lowmem'
+  label 'lowmem_non_threaded'
 
   input:
   tuple val(sample_id), path(input_fastq) from post_trim_qc_ch
@@ -322,7 +322,7 @@ process post_trim_multiqc {
 //       for bwa you have to go through additional steps with samtools / bedtools 
 process host_filtering {
   // publishDir "${params.outdir}", pattern: "*_R1_fh.fastq"
-  label 'highmem'                                                                
+  label 'lowmem_threaded'                                                                
 
   input:
   tuple val(sample_id), path(input_fastq) from post_trim_ch
@@ -352,7 +352,7 @@ process host_filtering {
   $bowtie_file_input \
   --sensitive \
   --score-min "C,${params.host_bt_min_score},0" \
-  -p "${params.host_bt_threads}" \
+  -p ${task.cpus} \
   $bowtie_file_output 2> "${sample_id}.host_filtering_bt.log" > /dev/null 
   """
 }
@@ -362,7 +362,7 @@ process host_filtering {
  Count post-host-filtering fastq
 */
 process host_filtered_fastq_count {
-  label 'lowmem'                                                                
+  label 'lowmem_non_threaded'                                                                
   publishDir "${params.counts_out_dir}", mode:'link'
 
   input:
@@ -391,7 +391,7 @@ Collect and compress all host-filtered fastq files --> deliverables
  output to bam
 */
 process bwa_align_to_refseq {
-  label 'lowmem'                                                                
+  label 'lowmem_threaded'                                                                
 
   input:
   tuple val(sample_id), path(input_fastq) from post_host_ch_variants
@@ -423,7 +423,7 @@ process bwa_align_to_refseq {
   bwa mem \
   -t !{params.refseq_bwa_threads} \
   -R $rg \
-  !{params.refseq_fasta} !{input_fastq} | samtools sort -@12 -o !{sample_id}.bam  -
+  !{params.refseq_fasta} !{input_fastq} | samtools sort -@!{task.cpus} -o !{sample_id}.bam  -
   '''
 }
 
@@ -438,7 +438,7 @@ process bwa_align_to_refseq {
  see: https://csb5.github.io/lofreq/commands/
 */
 process apply_bsqr {
-  label 'lowmem'                                                                
+  label 'lowmem_non_threaded'                                                                
   publishDir "${params.bam_out_dir}", mode:'link', pattern: "*.bam"             
 
 
@@ -473,7 +473,7 @@ process apply_bsqr {
  Count # of reads aligned to refseq
 */
 process refseq_aligned_read_count {
-  label 'lowmem'                                                                
+  label 'lowmem_non_threaded'                                                                
   publishDir "${params.counts_out_dir}", mode:'link'
 
   input:
@@ -510,7 +510,7 @@ process refseq_aligned_read_count {
  Tabulate depth of coverage over refseq
 */
 process tabulate_depth_one {
-  label 'lowmem'
+  label 'lowmem_non_threaded'
 
   input:
   tuple val(sample_id), path(input_bam) from post_bsqr_depth_ch
@@ -531,7 +531,7 @@ process tabulate_depth_one {
  R and processing with tidyverse packages
 */
 process prepend_depth {
-  label 'lowmem'
+  label 'lowmem_non_threaded'
 
   input:
   tuple val(sample_id), path(depth) from post_depth_ch
@@ -572,7 +572,7 @@ process tabulate_depth {
  Call DIs using DI-tector
 */
 process call_dvgs {
-  label 'lowmem'
+  label 'lowmem_threaded'
 
   input:
   tuple val(sample_id), path(input_fastq) from post_host_ch_dvg
@@ -603,12 +603,12 @@ process call_dvgs {
   cat $r1 $r2 > ${sample_id}_R12_fh.fastq
 
   # run DI-tector
-  python3 ${params.ditector_script} ${params.refseq_fasta} ${sample_id}_R12_fh.fastq -o "." -t DI -x 12 -p 0 -n 4 -l 0
+  python3 ${params.ditector_script} ${params.refseq_fasta} ${sample_id}_R12_fh.fastq -o "." -t DI -x ${task.cpus} -p 0 -n 4 -l 0
   """
 }
 
 process process_dvg_calls {
-  label 'lowmem'
+  label 'lowmem_non_threaded'
   publishDir "${params.ditector_out_dir}", mode:'link'
 
   input:
@@ -629,7 +629,7 @@ process process_dvg_calls {
 }
 
 process tabulate_dvg_calls {
-  label 'lowmem'
+  label 'lowmem_non_threaded'
   publishDir "${params.outdir}", mode:'link'
 
   input:
@@ -647,12 +647,11 @@ process tabulate_dvg_calls {
   """
 }
 
-
 /*
  Call SNVs using lofreq
 */
 process call_snvs {
-  label 'lowmem'
+  label 'lowmem_threaded'
   publishDir "${params.vcf_out_dir}", mode:'link'                               
 
 
@@ -669,9 +668,10 @@ process call_snvs {
   # ---------------
 
   # use lofreq to call variants
-  
+  lofreq index ${input_bam}
+
   # lofreq call to quantify variant frequencies 
-  lofreq call --no-default-filter -f ${params.refseq_fasta} -o ${input_bam}.pre_vcf ${input_bam}
+  lofreq call-parallel --pp-threads ${task.cpus} --no-default-filter -f ${params.refseq_fasta} -o ${input_bam}.pre_vcf ${input_bam}
 
   # call lofreq filter separately to avoid doing strand-bias filtering
   # -v N --> requires minimum Nx coverage (e.g. 40 = call variants at positions with > 40x coverage)
@@ -687,7 +687,7 @@ process call_snvs {
  Call Indels also using lofreq
 */
 process call_indels {
-  label 'lowmem'
+  label 'lowmem_threaded'
   publishDir "${params.vcf_out_dir}", mode:'link'                               
 
 
@@ -700,8 +700,10 @@ process call_indels {
   shell:
   '''
   lofreq indelqual --dindel -f !{params.refseq_fasta} -o !{input_bam}.indelqual.bam !{input_bam}
+
+  lofreq index !{input_bam}.indelqual.bam
                                                                                 
-  lofreq call --no-default-filter --call-indels --only-indels -f !{params.refseq_fasta} !{input_bam}.indelqual.bam > !{input_bam}.indel.pre_vcf
+  lofreq call-parallel --pp-threads !{task.cpus} --no-default-filter --call-indels --only-indels -f !{params.refseq_fasta} !{input_bam}.indelqual.bam > !{input_bam}.indel.pre_vcf
                                                                                 
   lofreq filter -v !{params.min_depth_for_variant_call} -V 0 -a !{params.min_allele_freq} -A 0 --no-defaults -i  !{input_bam}.indel.pre_vcf -o !{input_bam}.indel.vcf
   '''
@@ -755,7 +757,7 @@ process extract_annotated_variant_fields {
  R and processing with tidyverse packages
 */
 process prepend_snp_sift_output {
-  label 'lowmem'
+  label 'lowmem_non_threaded'
   publishDir "${params.vcf_out_dir}", mode:'link'
 
   input:
@@ -788,7 +790,7 @@ process tabulate_snpeff_variants {
 
   output:
   path("variant_summary.xlsx") 
-  path("sample_correlation_heatmap.pdf") 
+  path("sample_correlation_heatmap.pdf") optional true
 
   script:
   """

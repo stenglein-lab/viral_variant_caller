@@ -351,13 +351,15 @@ saveWorkbook(wb, paste0(output_directory, "variant_summary.xlsx"), overwrite = T
 # var_tidy_df_highest <- var_tidy_df %>% group_by(position) %>%
 # mutate(max_af = max(variant_fraction, na.rm = T)) %>% filter(max_af > 0.1) %>% select(-max_af) %>% ungroup()
 
-corr_matrix <- as.matrix(df_wide_enough_data %>% select(-reference_sequence, -position, -gene, 
-                                                        -indel, -variant, -reference_base, -variant_base, 
-                                                        -effect) %>% filter())
-row_names_df <- df_wide_enough_data %>% mutate(row_names = paste0(gene, "-", variant)) %>% select(row_names)
-row.names(corr_matrix) <- row_names_df$row_names
-corr_matrix[is.na(corr_matrix)] <- 0
-heatmap_p <- pheatmap(corr_matrix, scale = "none", fontsize=10)
-heatmap_p
-ggsave(paste0(output_directory, "sample_correlation_heatmap.pdf"), heatmap_p, units="in", width=10.5, height=7.5)
+if (nrow(df_wide_enough_data) > 2){
+  corr_matrix <- as.matrix(df_wide_enough_data %>% select(-reference_sequence, -position, -gene, 
+                                                          -indel, -variant, -reference_base, -variant_base, 
+                                                          -effect) %>% filter())
+  row_names_df <- df_wide_enough_data %>% mutate(row_names = paste0(gene, "-", variant)) %>% select(row_names)
+  row.names(corr_matrix) <- row_names_df$row_names
+  corr_matrix[is.na(corr_matrix)] <- 0
+  heatmap_p <- pheatmap(corr_matrix, scale = "none", fontsize=10)
+  heatmap_p
+  ggsave(paste0(output_directory, "sample_correlation_heatmap.pdf"), heatmap_p, units="in", width=10.5, height=7.5)
+}
 
