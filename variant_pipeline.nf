@@ -43,9 +43,11 @@ params.host_bt_threads = "8"
 
 // SARS-CoV-2 wa1 refseq, or a reference seq of your choosing
 params.refseq_dir = "${baseDir}/refseq/"
+// params.refseq_name = "NC_045512"
 params.refseq_name = "wa1"
 params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
 params.refseq_gff = "${params.refseq_dir}/${params.refseq_name}.gff"
+params.refseq_genbank = "${params.refseq_dir}/${params.refseq_name}.gb"
 params.refseq_bt_index = "${params.refseq_dir}/${params.refseq_name}"
 params.refseq_bt_min_score = "120"
 
@@ -58,7 +60,7 @@ params.scripts_bindir="${baseDir}/scripts"
 
 // DI-tector info
 params.ditector_script="${params.scripts_bindir}/DI-tector_06.py"
-params.run_ditector = true
+params.run_ditector = false
 
 // conda for snpEFF
 params.snpeff_cfg = "${params.refseq_dir}/snpEff.config" 
@@ -92,7 +94,7 @@ params.min_allele_freq="0.03"
  These fastq files represent the main input to this workflow
 */
 Channel
-    .fromFilePairs("${params.fastq_dir}/*_R{1,2}*.fastq", size: -1, checkIfExists: true, maxDepth: 1)
+    .fromFilePairs("${params.fastq_dir}/*_R{1,2}*.fastq*", size: -1, checkIfExists: true, maxDepth: 1)
     .into {samples_ch_qc; samples_ch_trim; samples_ch_count}
 
 
@@ -127,9 +129,11 @@ process setup_indexes {
   # cp fasta and gff for virus refseq to the directory location snpeff is expecting
   cp ${params.refseq_fasta} ${params.snpeff_data}/${params.refseq_name}/sequences.fa
   cp ${params.refseq_gff} ${params.snpeff_data}/${params.refseq_name}/genes.gff
+  cp ${params.refseq_genbank} ${params.snpeff_data}/${params.refseq_name}/genes.gbk
 
   # build the snpEff db
   snpEff build -c ${params.snpeff_cfg} -nodownload -v -gff3 -dataDir ${params.snpeff_data} ${params.refseq_name} > ${params.snpeff_data}/${params.refseq_name}.build
+  # snpEff build -c ${params.snpeff_cfg} -nodownload -v -genbank -dataDir ${params.snpeff_data} ${params.refseq_name} > ${params.snpeff_data}/${params.refseq_name}.build
 
   # -----------------------
   # bwa index viral refseq
@@ -452,6 +456,7 @@ process apply_bsqr {
   tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_depth_ch
   tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_indel_ch
   tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_count_ch
+  tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_consensus_ch
 
   """
   gatk BaseRecalibrator \
@@ -660,6 +665,7 @@ process call_snvs {
 
   output:
   tuple val(sample_id), path("${input_bam}.snv.vcf") into post_snv_call_ch
+  tuple val(sample_id), path("${input_bam}.snv.vcf") into post_snv_call_consensus_ch
 
   script:
   """
@@ -696,6 +702,7 @@ process call_indels {
 
   output:
   tuple val(sample_id), path("${input_bam}.indel.vcf") into post_indel_call_ch
+  tuple val(sample_id), path("${input_bam}.indel.vcf") into post_indel_call_consensus_ch
 
   shell:
   '''
@@ -708,6 +715,68 @@ process call_indels {
   lofreq filter -v !{params.min_depth_for_variant_call} -V 0 -a !{params.min_allele_freq} -A 0 --no-defaults -i  !{input_bam}.indel.pre_vcf -o !{input_bam}.indel.vcf
   '''
 }
+
+
+
+/* 
+ Call consensus sequences for each dataset 
+
+ Here we are using mpileup for variant calling instead of lofreq 
+ because I couldn't get lofreq vcf to work as input for bcftools
+
+*/
+process call_dataset_consensus {
+  publishDir "${params.outdir}", mode:'link'
+
+  input:
+  tuple val(sample_id), path(input_bam) from post_bsqr_consensus_ch
+
+  output:
+  tuple val(sample_id), path("${sample_id}_consensus.fasta") into post_merge_vcf_ch
+
+  script:
+  """
+  # consensus calling according to the strategy outlined here: https://www.biostars.org/p/367626/
+  samtools sort $input_bam -o sorted_input.bam
+  samtools mpileup -uf ${params.refseq_fasta} sorted_input.bam | bcftools call -c | vcfutils.pl vcf2fq > consensus.fastq
+  # Convert .fastq to .fasta and set bases of quality lower than 20 to N
+  seqtk seq -aQ64 -q20 -n N consensus.fastq > ${sample_id}_consensus.fasta
+  """
+}
+
+
+
+/* 
+  Consensus calling using same lofreq vcfs that defined called variants
+
+  ** couldn't get lofreq vcf to work as input for bcftools ** 
+
+*/
+/*
+process call_dataset_consensus {
+  publishDir "${params.outdir}", mode:'link'
+
+  input:
+  tuple val(sample_id), path(vcfs) from post_indel_call_consensus_ch
+    .concat(post_snv_call_consensus_ch)
+    .groupTuple()
+
+  output:
+  tuple val(sample_id), path("${sample_id}_consensus.fasta") into post_merge_vcf_ch
+
+  script:
+  """
+  # convert to compressed/indexed vcf to make bcftools happy
+  bcftools view ${vcfs[0]} -O z > ${vcfs[0]}.gz
+  bcftools index ${vcfs[0]}.gz
+  bcftools view ${vcfs[1]} -O z > ${vcfs[1]}.gz
+  bcftools index ${vcfs[1]}.gz
+
+  bcftools concat ${vcfs[0]}.gz ${vcfs[1]}.gz | bcftools call -c | vcfutils.pl vcf2fq > consensus.fastq
+  seqtk seq -aQ64 -q20 -n N consensus.fastq > ${sample_id}_consensus.fasta
+  """
+}
+*/
 
 
 /* 
@@ -747,7 +816,7 @@ process extract_annotated_variant_fields {
 
   script:
   """
-  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].HGVS_P > ${snp_eff}.snp_sift
+  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].AA_POS ANN[*].HGVS_P > ${snp_eff}.snp_sift
   """
 }
 

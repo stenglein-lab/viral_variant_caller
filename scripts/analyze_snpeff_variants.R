@@ -74,7 +74,7 @@ read_variant_file <- function(snp_sift_file_name) {
     
     names(df) <- c("sample_id", "reference_sequence", "position", "reference_base", 
                    "variant_base", "frequency", "depth", "strand_bias", "indel", 
-                   "effect", "impact", "gene", "variant")
+                   "effect", "impact", "gene", "codon", "variant")
     
     return(df)
   } else {
@@ -249,6 +249,7 @@ df_wide_enough_data <-
                 c(reference_sequence, 
                   position, 
                   gene, 
+						codon,
                   indel,
                   variant, 
                   reference_base, 
@@ -261,7 +262,7 @@ df_wide_enough_data <-
 
 # these values describe the # of header rows and columns in the big wide data table
 num_header_row = 1 
-num_header_col = 8 
+num_header_col = 9 
 
 
 # TODO: Merge in dataset metadata and add to top of table
@@ -370,10 +371,10 @@ saveWorkbook(wb, paste0(output_directory, "variant_summary.xlsx"), overwrite = T
 # var_tidy_df_highest <- var_tidy_df %>% group_by(position) %>%
 # mutate(max_af = max(variant_fraction, na.rm = T)) %>% filter(max_af > 0.1) %>% select(-max_af) %>% ungroup()
 
-if (nrow(df_wide_enough_data) > 2){
+if (nrow(df_wide_enough_data) > (num_header_row + 1) & ncol(df_wide_enough_data) > (num_header_col + 1) ) {
   corr_matrix <- as.matrix(df_wide_enough_data %>% select(-reference_sequence, -position, -gene, 
                                                           -indel, -variant, -reference_base, -variant_base, 
-                                                          -effect) %>% filter())
+                                                          -effect, -codon) %>% filter())
   row_names_df <- df_wide_enough_data %>% mutate(row_names = paste0(gene, "-", variant)) %>% select(row_names)
   row.names(corr_matrix) <- row_names_df$row_names
   corr_matrix[is.na(corr_matrix)] <- 0
