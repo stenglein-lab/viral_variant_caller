@@ -1,22 +1,15 @@
 library (tidyverse)
 library (openxlsx)
+library (pdftools)
 
 # This script reads in a variant table and generates some plots and summaries
 #
 # Mark Stenglein Oct 24, 2020
 
-# ------------------------
+# ---------------------------------------------------------------
 # import read depth info.   
-#
-# Depth of coverage for all viruses at all positions.
-#
-# all.depth was created by running this command (in mdstengl@cctsi-104:~/datasets/bunyas/all_sequences_1_11_19)
-# individual depth files were created using samtools depth
-#
-# cat *.depth > all.depth
-# cp all.depth ../bunya_dvg_analyses/data
-#
-# ------------------------
+# Depth of coverage for all reference_sequence at all positions.
+# ---------------------------------------------------------------
 if (!interactive()) {
   # if running from Rscript
   args = commandArgs(trailingOnly=TRUE)
@@ -30,14 +23,10 @@ if (!interactive()) {
 }
 
 depth_df <- read.delim(depth_file_name, sep="\t", header=FALSE)
-colnames(depth_df) <- c("dataset", "virus", "position", "depth")
+colnames(depth_df) <- c("dataset", "reference_sequence", "position", "depth")
 
-# rename datasets 
-# source(paste0(r_bindir, "/process_dataset_names.R"))
-# depth_df <- process_dataset_names(depth_df)
-
-# calculated median depth of (total) coverage for each virus in each dataset and store it in a new df
-median_depths <- depth_df %>% group_by(dataset, virus) %>% summarize(median_depth = median(depth))
+# calculated median depth of (total) coverage for each ref seq in each dataset and store it in a new df
+median_depths <- depth_df %>% group_by(dataset, reference_sequence) %>% summarize(median_depth = median(depth))
 
 wb <- createWorkbook("Median_depths.xlsx")
 addWorksheet(wb, "median_depth")
@@ -46,39 +35,88 @@ saveWorkbook(wb, "Median_depths.xlsx", overwrite = TRUE)
 
 # higlight coverage below a certain limit
 # TODO: Parameterize this
-min_depth_highlight <- 100
+min_depth_highlight <- 30
 depth_df <- depth_df %>% mutate(above_highlight = if_else(depth > min_depth_highlight, TRUE, FALSE))
 
 # max position for drawing a red rectangle showing low coverage
 max_position = max(depth_df$position)
 
-# plot depth for all viruses, all datasets
-ggplot(depth_df) +
-  geom_line(aes(x=position, y=depth), size = 0.5) +
-  # see: https://stackoverflow.com/questions/17521438/geom-rect-and-alpha-does-this-work-with-hard-coded-values
-  annotate("rect", xmin=0, xmax=max_position, ymin=1, ymax=min_depth_highlight, alpha=0.05, fill="red") +
-  scale_color_manual(values = c("red", "black")) +
-  theme_bw(base_size = 8) +
-  theme(legend.position = "none",
-        strip.text.y = element_text(angle=0)) +
-  # facet_grid(nice_dataset_name ~ virus, scales="free_y") +
-  facet_grid(dataset ~ virus, scales="free_y") +
-  scale_y_log10() +
-  xlab ("position in genome (nt)") +
-  ylab (paste0("coverage depth\n", "coverage below ", min_depth_highlight, " in red"))
+# ----------------------------------
+# calculate average depth in windows
+# ----------------------------------
+# %/% is the integer division operator
+window_size = 10
+depth_df <- depth_df %>% mutate (window = position %/% window_size)
 
-depth_df
+# calculate average coverage depth in each window
+df_windowed <- depth_df %>% 
+  group_by(dataset, reference_sequence, window)  %>% 
+  summarize(depth = mean(depth), .groups = "drop") %>% 
+  mutate(position = (window*window_size) + 1) %>% 
+  ungroup()
 
-ggsave("coverage_plot.pdf", units="in", width=10, height = 6.5)
+##now plot coverage data on multiple pdf pages
 
-ggplot(depth_df) +
-  geom_boxplot(aes(x=dataset, y=depth)) +
-  # annotate("rect", xmin=0, xmax=max_position, ymin=1, ymax=min_depth_highlight, alpha=0.05, fill="red") +
-  # scale_color_manual(values = c("red", "black")) +
-  theme_bw(base_size = 8) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
-  ggtitle("Even high median coverage across datasets\n2020-11-27") +
-  scale_y_log10() +
-  ylab (paste0("boxplots of coverage depth\nat all genome positions in indicated datasets"))
+# these are the datasets
+datasets <- depth_df %>% group_by(dataset) %>% summarize(.groups="drop") %>% pull()
 
-ggsave("coverage_plot_2.pdf", units="in", width=10, height = 6.5)
+plot_some_datasets <- function(datasets){
+
+  datasets_per_page <- 12
+
+  page_number <- 1
+
+  # iterate through the datasets, doing up to 12 per page
+  for (i in seq(1, length(datasets), datasets_per_page)) {
+
+    # plots_per_page at a time
+    subset_datasets <- datasets[i:(i+(datasets_per_page-1))]
+
+    # output to console which ones we're doing
+    # print(paste0(subset_datasets))
+
+    pdf_name <- paste0("coverage_plot_page_", page_number, ".pdf")
+
+    # generate & print plot
+    plot_datasets(subset_datasets, pdf_name)
+
+    page_number = page_number + 1
+  }
+
+}
+
+plot_datasets <- function(dataset_names, pdf_name){
+  
+  # subset the main dataframes to get the data just for these reference_sequence
+  subset_df <- df_windowed %>% filter(dataset %in% dataset_names)
+
+  # convert any depth of 0 into 1, since plotting on a log10 y scale...
+  subset_df <- subset_df %>% mutate(depth = if_else(depth == 0, 1, depth))
+  
+  # output the reference_sequence names to the console
+  # print(paste0(dataset_names))
+  
+  # p returned here is a ggplot object
+  p <- ggplot(subset_df) + 
+    geom_line(aes(x=position, y=depth), size=0.5) +
+    geom_area(aes(x=position, y=depth), fill="lightgrey") +
+    annotate("rect", xmin=0, xmax=max_position, ymin=1, ymax=min_depth_highlight, alpha=0.05, fill="red") +
+    scale_color_manual(values = c("red", "black")) +
+    theme_bw(base_size = 10) +
+    theme(panel.grid.major.x = element_blank(),
+          panel.grid.minor.x = element_blank(),
+          panel.grid.minor.y = element_blank()) +
+    scale_y_log10() +
+    xlab("genome position (nt)") +
+    ylab (paste0("coverage depth\n", "coverage below ", min_depth_highlight, " in red"))+
+    facet_grid(dataset~reference_sequence, scales="free", space="free_x")
+  
+  ggsave(pdf_name, p, height=10.5, width=7.5, units="in")
+
+    # print p will make the plots appear on viewer
+    # print(p)
+}
+
+plot_some_datasets(datasets)
+
+pdf_combine(c(list.files(pattern="pdf$")), output="coverage_plot.pdf")
