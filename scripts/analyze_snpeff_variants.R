@@ -38,7 +38,7 @@ if (!interactive()) {
   output_directory="../results/"
 }
 
-verbosity_level <- 3
+verbosity_level <- 0
  
 # debugging
 if (verbosity_level == 3) {
@@ -74,7 +74,7 @@ read_variant_file <- function(snp_sift_file_name) {
     
     names(df) <- c("sample_id", "reference_sequence", "position", "reference_base", 
                    "variant_base", "frequency", "depth", "strand_bias", "indel", 
-                   "effect", "impact", "gene", "codon", "variant")
+                   "effect", "impact", "gene", "codon", "variant", "featureid")
     
     return(df)
   } else {
@@ -154,6 +154,23 @@ variants$variant <- str_replace(variants$variant, ",.$", "")
 # get rid of the text ",intragenic_variant" at the end
 variants$effect <- 
   str_replace(variants$effect, ",intragenic_variant$", "")
+
+# get rid of the text "_variant" from effect text
+variants$effect <- 
+  str_replace(variants$effect, "_variant$", "")
+
+# get rid of the text "TRANSCRIPTS...," from featureid text
+# up to comma
+variants$featureid <- 
+  str_replace_all(variants$featureid, "TRANSCRIPT[^,]*", "")
+
+variants$featureid <- 
+  str_replace_all(variants$featureid, "gene-[^,]*",  "")
+
+# get rid of leading commas left after above replacements
+variants$featureid <- 
+  str_replace(variants$featureid, "^[,]+",  "")
+
 
 # how common are variants?
 # ggplot(variants) + geom_histogram(aes(x=number_occurences), bins=60) + theme_bw() + scale_y_log10()
@@ -254,7 +271,8 @@ df_wide_enough_data <-
                   variant, 
                   reference_base, 
                   variant_base, 
-                  effect), 
+                  effect,
+						featureid), 
               names_from=sample_id, 
               values_from=frequency,
               names_sort = T) %>%
@@ -262,7 +280,7 @@ df_wide_enough_data <-
 
 # these values describe the # of header rows and columns in the big wide data table
 num_header_row = 1 
-num_header_col = 9 
+num_header_col = 10 
 
 
 # TODO: Merge in dataset metadata and add to top of table
@@ -313,6 +331,10 @@ col_header_style <- createStyle(
   numFmt = "TEXT"
 )
 
+custom_annotation_style <- createStyle( 
+  bgFill = "#FFA07A"
+)
+
 # style header cols
 addStyle(wb=wb, sheet="variants", 
         style=col_header_style,
@@ -342,6 +364,18 @@ conditionalFormatting(wb=wb, sheet="variants",
                       rule = c(0, 1),
                       type = "colourScale"
 )
+
+
+# add conditional formatting to highlight any rows with custom annotations
+conditionalFormatting(wb=wb, sheet="variants", 
+                      "containsText",
+                      cols = 1:num_header_col,
+                      rows = num_header_row:nrow(df_wide_enough_data)+1,
+                      style = custom_annotation_style,
+                      rule = "VOC",
+                      type = "contains"
+)
+
 
 # add an Excel filter
 addFilter(wb=wb, sheet="variants", 
@@ -374,7 +408,7 @@ saveWorkbook(wb, paste0(output_directory, "variant_summary.xlsx"), overwrite = T
 if (nrow(df_wide_enough_data) > (num_header_row + 1) & ncol(df_wide_enough_data) > (num_header_col + 1) ) {
   corr_matrix <- as.matrix(df_wide_enough_data %>% select(-reference_sequence, -position, -gene, 
                                                           -indel, -variant, -reference_base, -variant_base, 
-                                                          -effect, -codon) %>% filter())
+                                                          -effect, -codon, -featureid) %>% filter())
   row_names_df <- df_wide_enough_data %>% mutate(row_names = paste0(gene, "-", variant)) %>% select(row_names)
   row.names(corr_matrix) <- row_names_df$row_names
   corr_matrix[is.na(corr_matrix)] <- 0
