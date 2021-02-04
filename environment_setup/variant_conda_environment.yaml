@@ -22,3 +22,4 @@ dependencies:
   - r-openxlsx=4.2.* 
   - r-egg=0.4.*
   - r-pheatmap=1.0.*
+  - r-pdftools=2.3.*

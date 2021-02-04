@@ -26,7 +26,8 @@ if (!interactive()) {
   depth_file = args[3]
   min_depth_to_call_variant = as.numeric(args[4])
   # -c(1:4) --> all but the first four element of the list
-  snp_sifts = args[-c(1:4)]
+  voc_file = args[5]
+  snp_sifts = args[-c(1:5)]
   output_directory="./"
 } else {
   # setup argument defaults for use in RStudio interactive environment
@@ -34,25 +35,11 @@ if (!interactive()) {
   min_allele_freq = 0.03
   depth_file = "../results/all.depth"
   min_depth_to_call_variant = 40
+  voc_file = "../refseq/variants_of_concern.xlsx"
   snp_sifts = list.files(path = "../results/vcf/", pattern = "*.variants.tsv$", full.names = T)
   output_directory="../results/"
 }
 
-verbosity_level <- 0
- 
-# debugging
-if (verbosity_level == 3) {
-  writeLines(paste0(
-    "min_allele_freq: ", min_allele_freq, "\n",
-    "depth_file: ", depth_file, "\n",
-    "min_depth_to_call_variant: ", min_depth_to_call_variant, "\n"),
-    "params.txt")
-  
-  writeLines(snp_sifts, "snp_sifts.txt")
-  
-  writeLines(capture.output(sessionInfo()), "sessionInfo.txt")
-}
-  
 # read in coverage depth info for all datasets
 depth_df <- read.delim(depth_file, sep="\t", header=FALSE, stringsAsFactors = F)
 colnames(depth_df) <- c("sample_id", "reference_sequence", "position", "depth")
@@ -254,6 +241,18 @@ variants_to_report <- variants %>% filter(variant_key %in% variants_in_freq$vari
 # this will create a dataframe with all the info necessary for reporting
 df_to_report <- left_join(freq_complete_with_depth, variants_to_report, 
                           by = "variant_key")
+
+# variants of concern 
+voc_df_all <- read_excel(voc_file)
+
+# keep just the necessary columns
+voc_df <- voc_df_all %>% select(gene, codon, variant_name)
+voc_df <- voc_df %>% mutate(codon = as.character(codon))
+
+# need to left join variant data onto voc data
+# this is imperfect: 
+voc_to_report <- left_join(voc_df, df_to_report, by=c("gene", "codon"))
+                 left_join(voc_df, df_to_report, by=c("gene", "codon"))
 
 
 # TODO: flag variants from datasets with too low (below some limit?) median coverage

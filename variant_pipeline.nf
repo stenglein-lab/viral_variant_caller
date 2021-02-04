@@ -20,6 +20,7 @@ params.counts_out_dir = "${params.outdir}/fastq_counts/"
 params.fastq_out_dir = "${params.outdir}/trimmed_fastq/"                        
 params.bam_out_dir = "${params.outdir}/bam/"                                    
 params.vcf_out_dir = "${params.outdir}/vcf/"  
+params.consensus_out_dir = "${params.outdir}/consensus_sequences/"  
 params.ditector_out_dir = "${params.outdir}/ditector/"  
 
 // ------------------
@@ -43,8 +44,8 @@ params.host_bt_threads = "8"
 
 // SARS-CoV-2 wa1 refseq, or a reference seq of your choosing
 params.refseq_dir = "${baseDir}/refseq/"
-// params.refseq_name = "NC_045512"
-params.refseq_name = "wa1"
+params.refseq_name = "NC_045512"
+// params.refseq_name = "wa1"
 params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
 params.refseq_gff = "${params.refseq_dir}/${params.refseq_name}.gff"
 params.refseq_genbank = "${params.refseq_dir}/${params.refseq_name}.gb"
@@ -67,8 +68,12 @@ params.snpeff_cfg = "${params.refseq_dir}/snpEff.config"
 params.snpeff_data = "${params.refseq_dir}/snpeff_data/"
 params.snpeff_threads = "8"
 
-// ignoring regions with 
+// regions to omit from BSQR step
 params.ignore_regions="${params.refseq_dir}/ignore_regions.bed"
+
+// optional custom variant annotation
+params.custom_annotations = true
+params.custom_annotations_bed = "${params.refseq_dir}/voc_positions.bed"
 
 // flag to optionally run cd-hit to collapse non-unique reads
 // skip this step by default
@@ -131,8 +136,9 @@ process setup_indexes {
   cp ${params.refseq_gff} ${params.snpeff_data}/${params.refseq_name}/genes.gff
   cp ${params.refseq_genbank} ${params.snpeff_data}/${params.refseq_name}/genes.gbk
 
-  # build the snpEff db
+  # build the snpEff db using gff format annotation and fasta sequence
   snpEff build -c ${params.snpeff_cfg} -nodownload -v -gff3 -dataDir ${params.snpeff_data} ${params.refseq_name} > ${params.snpeff_data}/${params.refseq_name}.build
+  # could make it from genbank format file
   # snpEff build -c ${params.snpeff_cfg} -nodownload -v -genbank -dataDir ${params.snpeff_data} ${params.refseq_name} > ${params.snpeff_data}/${params.refseq_name}.build
 
   # -----------------------
@@ -526,7 +532,7 @@ process tabulate_depth_one {
   script:
   """
   # process output using samtools
-  samtools depth -d 0 ${input_bam} > ${input_bam}.depth
+  samtools depth -a -d 0 ${input_bam} > ${input_bam}.depth
   """
 }
 
@@ -665,7 +671,6 @@ process call_snvs {
 
   output:
   tuple val(sample_id), path("${input_bam}.snv.vcf") into post_snv_call_ch
-  tuple val(sample_id), path("${input_bam}.snv.vcf") into post_snv_call_consensus_ch
 
   script:
   """
@@ -702,7 +707,6 @@ process call_indels {
 
   output:
   tuple val(sample_id), path("${input_bam}.indel.vcf") into post_indel_call_ch
-  tuple val(sample_id), path("${input_bam}.indel.vcf") into post_indel_call_consensus_ch
 
   shell:
   '''
@@ -726,7 +730,7 @@ process call_indels {
 
 */
 process call_dataset_consensus {
-  publishDir "${params.outdir}", mode:'link'
+  publishDir "${params.consensus_out_dir}", mode:'link'
 
   input:
   tuple val(sample_id), path(input_bam) from post_bsqr_consensus_ch
@@ -740,7 +744,8 @@ process call_dataset_consensus {
   samtools sort $input_bam -o sorted_input.bam
   samtools mpileup -uf ${params.refseq_fasta} sorted_input.bam | bcftools call -c | vcfutils.pl vcf2fq > consensus.fastq
   # Convert .fastq to .fasta and set bases of quality lower than 20 to N
-  seqtk seq -aQ64 -q20 -n N consensus.fastq > ${sample_id}_consensus.fasta
+  # the sed here adds in sample ID to the fasta header line, otherwise they all just have the same name 
+  seqtk seq -aQ64 -q20 -n N consensus.fastq | sed s/">"/">${sample_id}_"/ > ${sample_id}_consensus.fasta
   """
 }
 
@@ -783,7 +788,7 @@ process call_dataset_consensus {
  use snpEff to annotate vcfs 
  */
 process annotate_variants {
-  // publishDir "${params.vcf_out_dir}", mode:'link'
+  publishDir "${params.vcf_out_dir}", mode:'link'
 
   input:
   tuple val(sample_id), path(vcf) from post_indel_call_ch.concat(post_snv_call_ch)
@@ -792,8 +797,16 @@ process annotate_variants {
   tuple val(sample_id), path("${vcf}.snp_eff") into post_variant_annotate_ch
 
   script:
+
+  // setup optional custom annotation using the -interval command line option
+  // see: https://pcingola.github.io/SnpEff/se_commandline/
+  def custom_annotation  = params.custom_annotations ? "-interval $params.custom_annotations_bed" : ""
+
   """
-  snpEff ann -c ${params.snpeff_cfg} -dataDir ${params.snpeff_data} \
+  snpEff ann \
+    -c ${params.snpeff_cfg} \
+    -dataDir ${params.snpeff_data} \
+    $custom_annotation \
     -no-downstream \
     -no-upstream \
     -no-intergenic \
@@ -816,7 +829,7 @@ process extract_annotated_variant_fields {
 
   script:
   """
-  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].AA_POS ANN[*].HGVS_P > ${snp_eff}.snp_sift
+  SnpSift extractFields -e "." -s "," ${snp_eff} CHROM POS REF ALT AF DP SB INDEL ANN[*].EFFECT ANN[*].IMPACT ANN[*].GENE ANN[*].AA_POS ANN[*].HGVS_P ANN[*].FEATUREID > ${snp_eff}.snp_sift
   """
 }
 
