@@ -45,9 +45,8 @@ params.host_bt_threads = "8"
 // SARS-CoV-2 wa1 refseq, or a reference seq of your choosing
 params.refseq_dir = "${baseDir}/refseq/"
 params.refseq_name = "NC_045512"
-// params.refseq_name = "wa1"
+// params.refseq_name = "MN985325"
 params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
-params.refseq_gff = "${params.refseq_dir}/${params.refseq_name}.gff"
 params.refseq_genbank = "${params.refseq_dir}/${params.refseq_name}.gb"
 params.refseq_bt_index = "${params.refseq_dir}/${params.refseq_name}"
 params.refseq_bt_min_score = "120"
@@ -89,7 +88,7 @@ params.min_allele_freq="0.03"
 
 // TODO: command line arg processing and validating 
 
-// TODO: check that appropriate refseq files exist (fasta, gff, etc.)
+// TODO: check that appropriate refseq files exist (fasta, gb, etc.)
 
 // TODO: BSQR fails in case of no mapping reads... deal with this possibility 
 
@@ -131,15 +130,12 @@ process setup_indexes {
   # make a directory for the snp eff db
   mkdir -p ${params.snpeff_data}/${params.refseq_name}
 
-  # cp fasta and gff for virus refseq to the directory location snpeff is expecting
+  # cp fasta and genbank format data for virus refseq to the directory location snpeff is expecting
   cp ${params.refseq_fasta} ${params.snpeff_data}/${params.refseq_name}/sequences.fa
-  cp ${params.refseq_gff} ${params.snpeff_data}/${params.refseq_name}/genes.gff
   cp ${params.refseq_genbank} ${params.snpeff_data}/${params.refseq_name}/genes.gbk
 
-  # build the snpEff db using gff format annotation and fasta sequence
-  snpEff build -c ${params.snpeff_cfg} -nodownload -v -gff3 -dataDir ${params.snpeff_data} ${params.refseq_name} > ${params.snpeff_data}/${params.refseq_name}.build
   # could make it from genbank format file
-  # snpEff build -c ${params.snpeff_cfg} -nodownload -v -genbank -dataDir ${params.snpeff_data} ${params.refseq_name} > ${params.snpeff_data}/${params.refseq_name}.build
+  snpEff build -c ${params.snpeff_cfg} -nodownload -v -genbank -dataDir ${params.snpeff_data} ${params.refseq_name} > ${params.snpeff_data}/${params.refseq_name}.build
 
   # -----------------------
   # bwa index viral refseq
