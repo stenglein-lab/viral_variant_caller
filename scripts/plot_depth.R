@@ -109,7 +109,8 @@ plot_datasets <- function(dataset_names, pdf_name){
     scale_y_log10() +
     xlab("genome position (nt)") +
     ylab (paste0("coverage depth\n", "coverage below ", min_depth_highlight, " in red"))+
-    facet_grid(dataset~reference_sequence, scales="free", space="free_x")
+    facet_grid(dataset~reference_sequence, scales="free", space="free_x") +
+    theme(strip.text.y = element_text(angle = 0)) 
   
   ggsave(pdf_name, p, height=10.5, width=7.5, units="in")
 

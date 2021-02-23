@@ -42,10 +42,11 @@ params.host_bt_min_score = "60"
 params.host_bt_threads = "8"
 
 
-// SARS-CoV-2 wa1 refseq, or a reference seq of your choosing
+// SARS-CoV-2 USA/WA1 (Genbank accession MN985325), Wuhan-1 (NC_045512) reference sequence, 
+// or a reference seq of your choosing
 params.refseq_dir = "${baseDir}/refseq/"
-params.refseq_name = "NC_045512"
-// params.refseq_name = "MN985325"
+params.refseq_name = "MN985325"
+// params.refseq_name = "NC_045512"
 params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
 params.refseq_genbank = "${params.refseq_dir}/${params.refseq_name}.gb"
 params.refseq_bt_index = "${params.refseq_dir}/${params.refseq_name}"
@@ -146,6 +147,12 @@ process setup_indexes {
   # GATK index setup
   # -----------------
   # setup gatk indexes for BSQR
+
+  # first, we need to make, and then index a dummy ignore_regions.bed file because gatk requires this fileb
+  # this file will consist of the refseq name plus the coordinates 1 1, which is just the first base of the 
+  # reference sequence.  GATK will ignore this base for basecall quality score recalibration 
+  printf "%s\t1\t1\n" ${params.refseq_name} > ${params.ignore_regions}
+
   gatk IndexFeatureFile --feature-file ${params.ignore_regions} 
 
   rm -f "${params.refseq_dir}/${params.refseq_name}.dict"
@@ -566,6 +573,7 @@ process tabulate_depth {
   path("all.depth") into tabulate_dvg_depth_ch
   path("all.depth") into analyze_variants_depth_ch
   path("coverage_plot.pdf") 
+  path("Median_depths.xlsx") 
 
 
   script:
