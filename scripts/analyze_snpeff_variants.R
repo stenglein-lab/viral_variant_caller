@@ -11,6 +11,8 @@ library(pheatmap)
 # run from the command line 
 # or run interactively (i.e. via RStudio).  
 
+# TODO: modularize the functionality 
+
 # if being run from the command line
 if (!interactive()) {
   
@@ -38,21 +40,6 @@ if (!interactive()) {
   output_directory="../results/"
 }
 
-verbosity_level <- 0
- 
-# debugging
-if (verbosity_level == 3) {
-  writeLines(paste0(
-    "min_allele_freq: ", min_allele_freq, "\n",
-    "depth_file: ", depth_file, "\n",
-    "min_depth_to_call_variant: ", min_depth_to_call_variant, "\n"),
-    "params.txt")
-  
-  writeLines(snp_sifts, "snp_sifts.txt")
-  
-  writeLines(capture.output(sessionInfo()), "sessionInfo.txt")
-}
-  
 # read in coverage depth info for all datasets
 depth_df <- read.delim(depth_file, sep="\t", header=FALSE, stringsAsFactors = F)
 colnames(depth_df) <- c("sample_id", "reference_sequence", "position", "depth")
@@ -167,13 +154,12 @@ variants$featureid <-
 variants$featureid <- 
   str_replace_all(variants$featureid, "gene-[^,]*",  "")
 
+variants$featureid <- 
+  str_replace_all(variants$featureid, "GeneID:[^,]*",  "")
+
 # get rid of leading commas left after above replacements
 variants$featureid <- 
   str_replace(variants$featureid, "^[,]+",  "")
-
-
-# how common are variants?
-# ggplot(variants) + geom_histogram(aes(x=number_occurences), bins=60) + theme_bw() + scale_y_log10()
 
 
 # create df that only contains info about the variant frequencies and their depths 
