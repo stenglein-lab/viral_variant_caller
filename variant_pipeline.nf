@@ -466,6 +466,7 @@ process apply_bsqr {
   tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_indel_ch
   tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_count_ch
   tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_consensus_ch
+  tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_stats_ch
 
   """
   gatk BaseRecalibrator \
@@ -521,7 +522,54 @@ process refseq_aligned_read_count {
 }
 
 /*
+ Calculate some mapping statistics from the bam file
+*/
+process tabulate_mapping_stats_one {
+  label 'lowmem_non_threaded'
+
+  input:
+  tuple val(sample_id), path(input_bam) from post_bsqr_stats_ch
+
+  output:
+  path("${input_bam}.mapping_stats") optional true into post_stats_ch
+
+  shell:
+  '''
+  # process output using samtools
+  samtools stats -i 2000 !{input_bam} | grep ^IS | cut -f 2- | awk '{ print "!{sample_id}" "\t" $0; }' > !{input_bam}.mapping_stats
+  '''
+}
+
+/*
+ This process concatenates all the mapping stats files 
+*/
+process tabulate_stats {
+  publishDir "${params.outdir}", mode:'link'
+
+  input: 
+  path(mapping_stats_files) from post_stats_ch.collect()
+
+  output: 
+  path("mapping_stats_plot.pdf") 
+  path("all.mapping_stats") 
+
+
+  script:
+  """
+  cat $mapping_stats_files > all.mapping_stats
+  Rscript ${params.R_bindir}/plot_mapping_stats.R ${params.R_bindir} all.mapping_stats
+  """
+}
+
+
+
+/*
  Tabulate depth of coverage over refseq
+
+ This prepends coverage depth info for all samples with the 
+ sample ID as a first column so it'll be tidy format for import into 
+ R and processing with tidyverse packages
+ 
 */
 process tabulate_depth_one {
   label 'lowmem_non_threaded'
@@ -530,32 +578,12 @@ process tabulate_depth_one {
   tuple val(sample_id), path(input_bam) from post_bsqr_depth_ch
 
   output:
-  tuple val(sample_id), path("${input_bam}.depth") optional true into post_depth_ch
-
-  script:
-  """
-  # process output using samtools
-  samtools depth -a -d 0 ${input_bam} > ${input_bam}.depth
-  """
-}
-
-/*
- This process prepends coverage depth info for all samples with the 
- sample ID as a first colum so it'll be tidy format for import into 
- R and processing with tidyverse packages
-*/
-process prepend_depth {
-  label 'lowmem_non_threaded'
-
-  input:
-  tuple val(sample_id), path(depth) from post_depth_ch
-
-  output:
-  path("${sample_id}_prepended_depth") optional true into post_prepend_depth_ch
+  path("${input_bam}.depth") optional true into post_depth_ch
 
   shell:
   '''
-  cat !{depth} | awk '{ print "!{sample_id}" "\t" $0; }' > "!{sample_id}_prepended_depth"
+  # process output using samtools
+  samtools depth -a -d 0 !{input_bam} | awk '{ print "!{sample_id}" "\t" $0; }'  > !{input_bam}.depth
   '''
 }
 
@@ -567,7 +595,7 @@ process tabulate_depth {
   publishDir "${params.outdir}", mode:'link'
 
   input: 
-  path(depth_files) from post_prepend_depth_ch.collect()
+  path(depth_files) from post_depth_ch.collect()
 
   output: 
   path("all.depth") into tabulate_dvg_depth_ch
