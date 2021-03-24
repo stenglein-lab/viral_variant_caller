@@ -54,6 +54,8 @@ params.refseq_bt_min_score = "120"
 
 params.refseq_bwa_threads = "8"
 
+// plot mapping stats
+params.plot_mapping_stats = false
 
 // where are R scripts found...
 params.R_bindir="${baseDir}/scripts"
@@ -526,6 +528,9 @@ process refseq_aligned_read_count {
 */
 process tabulate_mapping_stats_one {
   label 'lowmem_non_threaded'
+
+  when:
+  params.plot_mapping_stats
 
   input:
   tuple val(sample_id), path(input_bam) from post_bsqr_stats_ch

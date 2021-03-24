@@ -16,7 +16,7 @@ if (!interactive()) {
   # TODO: check CLAs
   r_bindir=args[1]
   stats_file_name=args[2]
-  output_dir = "."
+  output_dir = "./"
 } else {
   # if running via RStudio
   r_bindir = "." 
@@ -57,8 +57,6 @@ p <- ggplot(df_windowed) +
     ylab ("mapped read pairs with that insert size") +
 	 facet_wrap(~dataset) +
     theme(strip.text.y = element_text(angle = 0)) 
-
-p
   
 ggsave(paste0(output_dir, "mapping_stats_plot.pdf"), p, height=7.5, width=10.5, units="in")
 
