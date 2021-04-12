@@ -21,22 +21,32 @@ To run the pipeline, you'll need to move your datasets (fastq files) into a new 
 nextflow run variant_pipeline.nf 
 ```
 
-
-#### Viral reference sequence
-
-This pipeline is by default set up to call variants relative to the SARS-CoV-2 WA1 genome.  This can be changed by changing these parameters in `variant_pipeline.nf`:
+To resume the pipeline if it stopped for some reason
 
 ```
-// SARS-CoV-2 wa1 refseq                                                        
-params.viral_refseq_name = "wa1"                                                
-params.viral_fasta = "${baseDir}/viral_refseq/${params.viral_refseq_name}.fasta"
-params.viral_gb = "${baseDir}/viral_refseq/${params.viral_refseq_name}.gb"      
-params.viral_gff = "${baseDir}/viral_refseq/${params.viral_refseq_name}.gff"  
+nextflow run variant_pipeline.nf -resume
 ```
 
-The viral_refseq directory should be populated with appropriate sequence files in .fasta, .gb, and .gff format.  So, in this example this directory is expected to contain files named wa1.fasta, wa1.gb, and wa1.gff.
+[See here](https://github.com/stenglein-lab/taxonomy_pipeline/blob/master/docs/tutorial.md#section_screen) for an explanation of using the screen utility to avoid dropped connections and premature termination of a pipeline.
 
-#### Host filtering
+
+### Viral reference sequence
+
+This pipeline is by default set up to call variants relative to a SARS-CoV-2 reference genome, but it could be reconfigured pretty easily to call variants relative to a different reference sequence.  This can be done by changing these parameters in `variant_pipeline.nf`:
+
+```
+// SARS-CoV-2 USA/WA1 (Genbank accession MN985325), Wuhan-1 (NC_045512) reference sequence, 
+// or a reference seq of your choosing                                          
+params.refseq_dir = "${baseDir}/refseq/"                                        
+params.refseq_name = "MN985325"                                                 
+// params.refseq_name = "NC_045512"                                             
+params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"        
+params.refseq_genbank = "${params.refseq_dir}/${params.refseq_name}.gb" 
+```
+
+The pipeline is expecting your reference sequence to exist in the refseq directory in fasta and genbank format.  These can both be downloaded from NCBI, or exported from software like geneious.  The refseq directory should be populated with appropriate files.  So, in the above example, the pipeline is expecting the refseq directory to contain files named MN985325.fasta and MN985325.gb.  This is the USA/WA1 SARS-CoV-2 sequence.  
+
+### Host filtering
 
 A step in this pipline removes host-derived reads.  To modify the host genome used, modify these parameters in the main nextflow pipeline file:
 ```
@@ -45,6 +55,8 @@ params.host_bt_suffix = "agm_genome"
 ```
 
 (agm here stands for African green monkey, because when this pipeline was developed, we were analyzing virus grown in Vero cells, which are from that species of monkey.
+
+You will need an [existing bowtie2 index](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#the-bowtie2-build-indexer) to exist for the pipeline to do host filtering.  
 
 
 ### Dependencies
@@ -62,8 +74,22 @@ This pipeline depends on the scripts in this repository as well as the following
 - [samtools](http://samtools.github.io/)
 - [R](https://www.r-project.org/)
 
+These dependencies are handled via the conda environment defined in this repository.  [See here for instructions](./environment_setup/README.md) on creating this environment. 
 
 
+### Results
+
+The results of this pipeline will be output to a results subdirectory. The main pipeline outputs are:
+
+- **variant_summary.xlsx:** this spreadsheet contains a matrix of variant frequencies of all detected variants in all datasets. 
+- **consensus_sequences:** a directory containing a consensus sequence for each dataset (variants >50% will change consensus relative to the original refseq)
+- **sample_correlation_heatmap.pdf:** A heatmap of variants and clustering of variants and datasets
+- **initial_qc_report.html, post_trim_qc_report.html:** QC reports of raw data before and after adapter/quality trimming
+- **coverage_plots.pdf:** coverage plots over virus reference sequence 
+- **Median_dephts.xlsx:** median coverage values over virus reference sequence in each dataset
+- **filtering_plots.pdf:** plots of #/fraction of reads remaining after various filtering steps
+
+[See here](https://github.com/stenglein-lab/taxonomy_pipeline/blob/master/docs/tutorial.md#-transferring-files-to-and-from-servers) for an explanation of how to transfer files from a server using a utility like sftp or cyberduck
 
 #### A note on the snpEff database
 
