@@ -45,7 +45,7 @@ params.host_bt_threads = "8"
 // SARS-CoV-2 USA/WA1 (Genbank accession MN985325), Wuhan-1 (NC_045512) reference sequence, 
 // or a reference seq of your choosing
 params.refseq_dir = "${baseDir}/refseq/"
-params.refseq_name = "MN985325"
+params.refseq_name = "rvfv_csu"
 // params.refseq_name = "NC_045512"
 params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
 params.refseq_genbank = "${params.refseq_dir}/${params.refseq_name}.gb"
@@ -63,7 +63,7 @@ params.scripts_bindir="${baseDir}/scripts"
 
 // DI-tector info
 params.ditector_script="${params.scripts_bindir}/DI-tector_06.py"
-params.run_ditector = false
+params.run_ditector = true
 
 // conda for snpEFF
 params.snpeff_cfg = "${params.refseq_dir}/snpEff.config" 
@@ -122,6 +122,8 @@ process setup_indexes {
   # ------------------
   lofreq faidx ${params.refseq_fasta}
 
+  echo "shouldnt matter"
+
   # ----------------
   # setup snpEFF db
   # ----------------
@@ -150,11 +152,15 @@ process setup_indexes {
   # -----------------
   # setup gatk indexes for BSQR
 
-  # first, we need to make, and then index a dummy ignore_regions.bed file because gatk requires this fileb
+  # first, we need to make, and then index a dummy ignore_regions.bed file because gatk requires this file.
   # this file will consist of the refseq name plus the coordinates 1 1, which is just the first base of the 
   # reference sequence.  GATK will ignore this base for basecall quality score recalibration 
-  printf "%s\t1\t1\n" ${params.refseq_name} > ${params.ignore_regions}
+  # 
+  # first, parse out name of first refseq from the refseq fasta file
+  fasta_refseq_name=`head -1 ${params.refseq_fasta} | tr -d '>'`
+  printf "%s\t1\t1\n" \$fasta_refseq_name > ${params.ignore_regions}
 
+  rm -f "${params.refseq_name}.idx"
   gatk IndexFeatureFile --feature-file ${params.ignore_regions} 
 
   rm -f "${params.refseq_dir}/${params.refseq_name}.dict"
