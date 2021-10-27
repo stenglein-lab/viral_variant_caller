@@ -36,8 +36,14 @@ params.post_trim_min_length = "60"
 // Host cell filtering
 // --------------------
 // Vero cell: African green monkey genome for host filtering
-params.host_bt_index = "/home/databases/primates/agm_genome"
-params.host_bt_suffix = "agm_genome"
+// params.host_bt_index = "/home/databases/primates/agm_genome"
+// params.host_bt_suffix = "agm_genome"
+// params.host_bt_min_score = "60"
+// params.host_bt_threads = "8"
+
+// Human samples: use human genome for host filtering
+params.host_bt_index = "/home/databases/human/GCRh38"
+params.host_bt_suffix = "human_genome"
 params.host_bt_min_score = "60"
 params.host_bt_threads = "8"
 
@@ -45,8 +51,7 @@ params.host_bt_threads = "8"
 // SARS-CoV-2 USA/WA1 (Genbank accession MN985325), Wuhan-1 (NC_045512) reference sequence, 
 // or a reference seq of your choosing
 params.refseq_dir = "${baseDir}/refseq/"
-params.refseq_name = "MN985325"
-// params.refseq_name = "NC_045512"
+params.refseq_name = "NC_045512"
 params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
 params.refseq_genbank = "${params.refseq_dir}/${params.refseq_name}.gb"
 params.refseq_bt_index = "${params.refseq_dir}/${params.refseq_name}"
@@ -202,7 +207,7 @@ process initial_fastq_count {
   // for an explanation of the xargs command used for arithmetic in a pipe, see: 
   // https://askubuntu.com/questions/1203063/how-can-i-pipe-the-result-of-the-wc-command-into-an-arithmetic-expansion
   '''
-  cat !{initial_fastq[0]} | wc -l | xargs bash -c 'echo $(($0 / 4))' | awk '{print "!{sample_id}" "\tinitial\t" $1}' > "!{sample_id}_initial_count.txt"
+  zcat -f !{initial_fastq[0]} | wc -l | xargs bash -c 'echo $(($0 / 4))' | awk '{print "!{sample_id}" "\tinitial\t" $1}' > "!{sample_id}_initial_count.txt"
   '''
 }
 
@@ -286,7 +291,7 @@ process trimmed_fastq_count {
   // only count the first file because for paired-read data both files
   // will have the same # of reads.
   '''
-  cat !{trimmed_fastq[0]} | wc -l | xargs bash -c 'echo $(($0 / 4))' |  awk '{print "!{sample_id}" "\tpost_trimming\t" $1}' > "!{sample_id}_trimmed_count.txt"
+  zcat -f !{trimmed_fastq[0]} | wc -l | xargs bash -c 'echo $(($0 / 4))' |  awk '{print "!{sample_id}" "\tpost_trimming\t" $1}' > "!{sample_id}_trimmed_count.txt"
   '''
 }
 
@@ -390,7 +395,7 @@ process host_filtered_fastq_count {
   // only count the first file because for paired-read data both files
   // will have the same # of reads.
   '''
-  cat !{filtered_fastq[0]} | wc -l | xargs bash -c 'echo $(($0 / 4))' |  awk '{print "!{sample_id}" "\tpost_host_filtered\t" $1}' > "!{sample_id}_host_filtered_count.txt"
+  zcat -f !{filtered_fastq[0]} | wc -l | xargs bash -c 'echo $(($0 / 4))' |  awk '{print "!{sample_id}" "\tpost_host_filtered\t" $1}' > "!{sample_id}_host_filtered_count.txt"
   '''
 }
 
@@ -606,7 +611,7 @@ process tabulate_depth {
   path("all.depth") into tabulate_dvg_depth_ch
   path("all.depth") into analyze_variants_depth_ch
   path("coverage_plot.pdf") 
-  path("Median_depths.xlsx") 
+  path("Average_depths.xlsx") 
 
 
   script:

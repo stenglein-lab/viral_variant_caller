@@ -26,12 +26,15 @@ depth_df <- read.delim(depth_file_name, sep="\t", header=FALSE)
 colnames(depth_df) <- c("dataset", "reference_sequence", "position", "depth")
 
 # calculated median depth of (total) coverage for each ref seq in each dataset and store it in a new df
-median_depths <- depth_df %>% group_by(dataset, reference_sequence) %>% summarize(median_depth = median(depth))
+median_depths <- depth_df %>% 
+  group_by(dataset, reference_sequence) %>% 
+  summarize(median_depth = median(depth),
+            mean_depth = mean(depth))
 
-wb <- createWorkbook("Median_depths.xlsx")
-addWorksheet(wb, "median_depth")
-writeData(wb, "median_depth", median_depths)
-saveWorkbook(wb, "Median_depths.xlsx", overwrite = TRUE)
+wb <- createWorkbook("Average_depths.xlsx")
+addWorksheet(wb, "average_depth")
+writeData(wb, "average_depth", median_depths)
+saveWorkbook(wb, "Average_depths.xlsx", overwrite = TRUE)
 
 # higlight coverage below a certain limit
 # TODO: Parameterize this
