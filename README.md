@@ -8,10 +8,15 @@ This repository contains a pipeline for calling single nucleotide and structural
 To download this pipeline, run:
 
 ```
-git clone https://github.com/stenglein-lab/viral_variant_caller.git
+git clone -b cdphe_sequencing https://github.com/stenglein-lab/viral_variant_caller.git
 ```
 
+**Need to update this documentation to reflect CDPHE-sequencing specific changes**
+
+
 ### Usage
+
+
 
 Before you run this pipeline, you'll have to make sure that dependencies (software on which this pipeline depends) are in place.  The best way to do this is to use the included [conda environment](./environment_setup/variant_conda_environment.yaml).  Please see the [instructions to install and setup this environment](./environment_setup/README.md) for instructions on how to install and initialize this environment.
 
@@ -35,16 +40,15 @@ nextflow run variant_pipeline.nf -resume
 This pipeline is by default set up to call variants relative to a SARS-CoV-2 reference genome, but it could be reconfigured pretty easily to call variants relative to a different reference sequence.  This can be done by changing these parameters in `variant_pipeline.nf`:
 
 ```
-// SARS-CoV-2 USA/WA1 (Genbank accession MN985325), Wuhan-1 (NC_045512) reference sequence, 
+// SARS-CoV-2 Wuhan-1 (NC_045512) reference sequence, 
 // or a reference seq of your choosing                                          
 params.refseq_dir = "${baseDir}/refseq/"                                        
-params.refseq_name = "MN985325"                                                 
-// params.refseq_name = "NC_045512"                                             
+params.refseq_name = "NC_045512"                                             
 params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"        
 params.refseq_genbank = "${params.refseq_dir}/${params.refseq_name}.gb" 
 ```
 
-The pipeline is expecting your reference sequence to exist in the refseq directory in fasta and genbank format.  These can both be downloaded from NCBI, or exported from software like geneious.  The refseq directory should be populated with appropriate files.  So, in the above example, the pipeline is expecting the refseq directory to contain files named MN985325.fasta and MN985325.gb.  This is the USA/WA1 SARS-CoV-2 sequence.  
+The pipeline is expecting your reference sequence to exist in the refseq directory in fasta and genbank format.  These can both be downloaded from NCBI, or exported from software like geneious.  The refseq directory should be populated with appropriate files.  So, in the above example, the pipeline is expecting the refseq directory to contain files named NC_045512.fasta and NC_045512.gb.  This is the RefSeq SARS-CoV-2 sequence.  
 
 ### Host filtering
 
