@@ -21,25 +21,14 @@ params.fastq_out_dir = "${params.outdir}/trimmed_fastq/"
 params.bam_out_dir = "${params.outdir}/bam/"                                    
 params.vcf_out_dir = "${params.outdir}/vcf/"  
 params.consensus_out_dir = "${params.outdir}/consensus_sequences/"  
+params.consensus_pass_dir = "sufficiently_complete/"  
+params.consensus_fail_dir = "insufficiently_complete/"  
+params.pangolin_out_dir = "${params.outdir}/pangolin/"
 params.ditector_out_dir = "${params.outdir}/ditector/"  
-
-// ------------------
-// Trimming settings
-// ------------------
-// SARS-CoV-2 ARTIC v3 primers are 22-30 bp long, so always trim 30
-// TODO: don't do this for non-amplicon datasets! 
-params.always_trim_5p_bases = "30" 
-params.always_trim_3p_bases = "1" 
-params.post_trim_min_length = "60" 
 
 // --------------------
 // Host cell filtering
 // --------------------
-// Vero cell: African green monkey genome for host filtering
-// params.host_bt_index = "/home/databases/primates/agm_genome"
-// params.host_bt_suffix = "agm_genome"
-// params.host_bt_min_score = "60"
-// params.host_bt_threads = "8"
 
 // Human samples: use human genome for host filtering
 params.host_bt_index = "/home/databases/human/GCRh38"
@@ -48,7 +37,10 @@ params.host_bt_min_score = "60"
 params.host_bt_threads = "8"
 
 
-// SARS-CoV-2 USA/WA1 (Genbank accession MN985325), Wuhan-1 (NC_045512) reference sequence, 
+// -------------------
+// Reference sequence
+// -------------------
+// SARS-CoV-2 Wuhan-1 (NC_045512) reference sequence, 
 // or a reference seq of your choosing
 params.refseq_dir = "${baseDir}/refseq/"
 params.refseq_name = "NC_045512"
@@ -59,12 +51,32 @@ params.refseq_bt_min_score = "120"
 
 params.refseq_bwa_threads = "8"
 
+
+// ------------------
+// Trimming settings
+// ------------------
+params.always_trim_5p_bases = "0" 
+params.always_trim_3p_bases = "0" 
+params.post_trim_min_length = "30" 
+
+params.primer_fasta_5p = "${params.refseq_dir}/swift_primers.5p.fasta"
+params.primer_fasta_3p = "${params.refseq_dir}/swift_primers.3p.fasta"
+
+
 // plot mapping stats
 params.plot_mapping_stats = false
 
 // where are R scripts found...
 params.R_bindir="${baseDir}/scripts"
 params.scripts_bindir="${baseDir}/scripts"
+
+// minimum fraction called (fraction non-N bases in consensus sequence)
+// to have consensus sequence pass
+params.minimum_fraction_called = 0.95
+
+// Call and annotate intra-host variants?
+// not imlemented yet
+// params.call_variants = true
 
 // DI-tector info
 params.ditector_script="${params.scripts_bindir}/DI-tector_06.py"
@@ -164,6 +176,14 @@ process setup_indexes {
 
   rm -f "${params.refseq_dir}/${params.refseq_name}.dict"
   gatk CreateSequenceDictionary -R ${params.refseq_fasta}
+
+  # --------
+  # Pangolin
+  # --------
+  # Have pangolin update itself to be sure using latest pangolin lineage info
+  # TODO: didn't work to have pangolin in an environment with other tools, for some reason
+  #       So move this to a separate process upstream of using pangolin 
+  # pangolin --update
   """
 }
 
@@ -238,7 +258,7 @@ process initial_multiqc {
  Use cutadapt to trim off adapters and low quality bases
 */
 process trim_adapters_and_low_quality {
-  // publishDir "${params.outdir}"
+  publishDir "${params.post_trim_fastqc_dir}", mode:'link'
   label 'lowmem_non_threaded'                                                                
 
   input:
@@ -248,26 +268,36 @@ process trim_adapters_and_low_quality {
   tuple val(sample_id), path("*_f.fastq") optional true into post_trim_qc_ch
   tuple val(sample_id), path("*_f.fastq") optional true into post_trim_ch
   tuple val(sample_id), path("*_f.fastq") optional true into post_trim_count_ch
+  path ("*cutadapt.json") 
 
   // TODO: put adapters as a param (?)
   script:
 
   // this handles paired-end data, in which case must specify a paired output file
   def paired_output   = initial_fastq[1] ? "-p ${sample_id}_R2_f.fastq" : ""
-  def paired_adapters = initial_fastq[1] ? "-A AGATCGGAAGAGC -G GCTCTTCCGATCT -A AGATGTGTATAAGAGACAG -G CTGTCTCTTATACACATCT" : ""
-  // TODO: don't trim this much for non-amplicon data!
+
+  // fixed # of bases to trim
   def paired_trimming = initial_fastq[1] ? "-U $params.always_trim_5p_bases -U -${params.always_trim_3p_bases}" : ""
+
+  // trim TruSeq-style cutadapt
+  // see: https://cutadapt.readthedocs.io/en/stable/guide.html#illumina-truseq
+  def truseq_cutadapt = "-a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
 
   """
   cutadapt \
-   -a AGATCGGAAGAGC -g GCTCTTCCGATCT -a AGATGTGTATAAGAGACAG -g CTGTCTCTTATACACATCT \
-   $paired_adapters \
+   -O 12 \
+   -a file:${params.primer_fasta_3p} \
+   -g file:${params.primer_fasta_5p} \
+   -A file:${params.primer_fasta_3p} \
+   -G file:${params.primer_fasta_5p} \
+   $truseq_cutadapt \
    -q 30,30 \
    --minimum-length ${params.post_trim_min_length} \
    -u ${params.always_trim_5p_bases} \
    -u -${params.always_trim_3p_bases} \
    $paired_trimming \
    -o ${sample_id}_R1_f.fastq \
+   --json=${sample_id}.cutadapt.json \
    $paired_output \
    $initial_fastq 
   """
@@ -611,7 +641,7 @@ process tabulate_depth {
   path("all.depth") into tabulate_dvg_depth_ch
   path("all.depth") into analyze_variants_depth_ch
   path("coverage_plot.pdf") 
-  path("Average_depths.xlsx") 
+  path("Average_depths.xlsx") into average_depth_ch
 
 
   script:
@@ -772,13 +802,15 @@ process call_indels {
 
 */
 process call_dataset_consensus {
-  publishDir "${params.consensus_out_dir}", mode:'link'
+  // publishDir "${params.consensus_out_dir}", mode:'link'
 
   input:
   tuple val(sample_id), path(input_bam) from post_bsqr_consensus_ch
 
   output:
   tuple val(sample_id), path("${sample_id}_consensus.fasta") into post_merge_vcf_ch
+  tuple val(sample_id), path("${sample_id}_consensus.fasta") into consensus_completeness_fasta_ch
+  tuple val(sample_id), path("${sample_id}_consensus.fasta") into assign_pangolin_ch
 
   script:
   """
@@ -787,9 +819,186 @@ process call_dataset_consensus {
   samtools mpileup -uf ${params.refseq_fasta} sorted_input.bam | bcftools call -c | vcfutils.pl vcf2fq > consensus.fastq
   # Convert .fastq to .fasta and set bases of quality lower than 20 to N
   # the sed here adds in sample ID to the fasta header line, otherwise they all just have the same name 
-  seqtk seq -aQ64 -q20 -n N consensus.fastq | sed s/">"/">${sample_id}_"/ > ${sample_id}_consensus.fasta
+  seqtk seq -aQ64 -q20 -n N consensus.fastq | sed s/">.*"/">${sample_id}"/ > ${sample_id}_consensus.fasta
   """
 }
+
+
+
+/*
+   Calculate the fraction of non-N bases (fraction completeness) of consensus sequence(s) for a dataset
+*/
+process calculate_consensus_completeness {
+
+  input:
+  tuple val(sample_id), path(consensus_fasta) from consensus_completeness_fasta_ch
+
+  output:
+  path("*consensus_completeness.txt") into individual_consensus_completeness_ch
+  tuple val(sample_id), env(fraction_complete), path(consensus_fasta) into triage_consensus_ch
+
+  shell:
+  def fraction_complete = 0
+  '''
+  fraction_complete=`!{params.scripts_bindir}/determine_consensus_completeness.pl !{consensus_fasta}`
+  echo $fraction_complete | awk '{ print "!{sample_id}" "\t" $0; }'  > "!{sample_id}_consensus_completeness.txt"
+  # !{params.scripts_bindir}/determine_consensus_completeness.pl !{consensus_fasta} | awk '{ print "!{sample_id}" "\t" $0; }'  > "!{sample_id}_consensus_completeness.txt"
+  # echo la dee da
+  '''
+
+}
+
+/*
+   Triage consensus sequences based on whether they satisfy a particular pass/fail criteria
+   For now, must be > 95% complete (95% of bases have to be not Ns)
+*/
+
+process triage_consensus_sequences {
+  publishDir "${params.consensus_out_dir}", mode:'link',
+    // this code block sorts consensus sequences into two directories
+    // based on whether they are sufficiently complete or not
+    saveAs: { filename -> 
+                if (filename.endsWith("_PASS")) { 
+                  def newName = filename.replaceAll("_PASS", "") 
+                  "sufficiently_complete/$newName" 
+                }
+                else {
+                  def newName = filename.replaceAll("_FAIL", "") 
+                  "insufficiently_complete/$newName"
+                }
+            }
+
+
+
+  input:
+  tuple val(sample_id), val(fraction_complete), path(consensus_fasta) from triage_consensus_ch
+
+  output:
+  path ("*consensus.fasta*")
+
+  script:
+    // triage consensus sequences based on whether they are sufficiently complete
+    // doing it this way is awkward - perhaps try to make more elegant
+    if( Float.parseFloat(fraction_complete) >= params.minimum_fraction_called)
+       """
+       ln $consensus_fasta "${sample_id}_consensus.fasta_PASS"
+       """
+    else
+       """
+       ln $consensus_fasta "${sample_id}_consensus.fasta_FAIL"
+       """
+}
+
+/*
+   Concatenate the consensus completeness info into a single file to be fed to a reporting script
+*/
+process tabulate_consensus_completeness {
+  publishDir "${params.outdir}", mode:'link'                               
+
+  input:
+  path(files) from individual_consensus_completeness_ch.collect()
+
+  output:
+  path("all_consensus_completeness.txt") into consensus_completeness_ch
+
+  script:
+  """
+  # mash the output together
+  cat $files > all_consensus_completeness.txt
+  """
+}
+
+/*
+   Assign consensus sequence to a PANGO lineage using Pangolin
+
+   Might be better to do this on a single concatenated file
+   containing all the sequences...
+*/
+
+process assign_to_pango_lineage {
+  publishDir "${params.pangolin_out_dir}", mode:'link'
+  
+  conda './environment_setup/pangolin.yaml'
+
+  input: 
+  tuple val(sample_id), path(consensus_fasta) from assign_pangolin_ch
+
+  output: 
+  path ("*lineage_report.csv") into collect_pangolin_ch
+
+  shell:
+  '''
+  pangolin --outfile !{sample_id}_lineage_report.csv !{consensus_fasta}
+  '''
+}
+
+/*
+   Concatenate the pangolin assignment info into a single file to be fed to a reporting script
+*/
+process tabulate_pangolin_info {
+  publishDir "${params.outdir}", mode:'link'                               
+
+  input:
+  path(files) from collect_pangolin_ch.collect()
+
+  output:
+  path("pangolin_lineage_report.csv") into pangolin_report_ch
+
+  script:
+  """
+  # pull out header line from first file (assumes word "taxon" in header)
+  head -1 $files | grep taxon | head -1 > pangolin_lineage_report.csv
+
+  # pull out the data lines from rest of files 
+  # (assumes word "taxon" in header but not data lines)
+  cat $files | grep -v taxon >> pangolin_lineage_report.csv
+  """
+}
+
+
+/*
+  Report on completeness
+*/
+/*
+process report_on_completeness {
+  publishDir "${params.outdir}", mode:'link'                               
+
+  input:
+  path(consensus_completeness) from consensus_completeness_ch
+  path(average_depth_xls) from average_depth_ch
+
+  output:
+  path("*.pdf") into consensus_report_ch
+
+  script:
+  """
+  Rscript ${params.R_bindir}/analyze_genome_completeness.R $average_depth_xls $consensus_completeness
+  """
+}
+*/
+
+
+/*
+  Report on datasets
+*/
+process report_on_datasets {
+  publishDir "${params.outdir}", mode:'link'                               
+
+  input:
+  path(consensus_completeness) from consensus_completeness_ch
+  path(average_depth_xls) from average_depth_ch
+  path(pangolin_lineage_report) from pangolin_report_ch
+
+  output:
+  path("*.xlsx") 
+  path("*.pdf") 
+
+  script:
+  """
+  Rscript ${params.R_bindir}/report_on_datasets.R $average_depth_xls $consensus_completeness $pangolin_lineage_report ${params.minimum_fraction_called}
+  """
+}
+
 
 
 
@@ -801,7 +1010,7 @@ process call_dataset_consensus {
 */
 /*
 process call_dataset_consensus {
-  publishDir "${params.outdir}", mode:'link'
+  // publishDir "${params.outdir}", mode:'link'
 
   input:
   tuple val(sample_id), path(vcfs) from post_indel_call_consensus_ch
@@ -935,6 +1144,7 @@ process tabulate_fastq_counts {
 
   output:
   path ("all_read_counts.txt") 
+  path ("summarized_read_counts.txt") 
   path ("filtering_plots.pdf") 
 
   script:

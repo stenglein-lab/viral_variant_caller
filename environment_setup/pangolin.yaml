@@ -1,0 +1,6 @@
+name: variant_conda_environment
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - pangolin
