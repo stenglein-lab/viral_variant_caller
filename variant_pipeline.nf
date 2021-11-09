@@ -255,14 +255,57 @@ process initial_multiqc {
 }
 
 /*
- Use cutadapt to trim off adapters and low quality bases
+ Use cutadapt to trim off Illumina adapters and low quality bases
 */
-process trim_adapters_and_low_quality {
-  publishDir "${params.post_trim_fastqc_dir}", mode:'link'
-  label 'lowmem_non_threaded'                                                                
+
+process trim_illumina_adapters_and_low_quality {
+  // publishDir "${params.post_trim_fastqc_dir}", mode:'link', pattern:"*.json"
+  label 'lowmem_threaded'                                                                
 
   input:
   tuple val(sample_id), path(initial_fastq) from samples_ch_trim
+
+  output:
+  tuple val(sample_id), path("*_f1.fastq") into samples_ch_second_trim
+
+  script:
+
+  // this handles paired-end data, in which case must specify a paired output file
+  def paired_output   = initial_fastq[1] ? "-p ${sample_id}_R2_f1.fastq" : ""
+
+  // fixed # of bases to trim
+  def paired_trimming = initial_fastq[1] ? "-U $params.always_trim_5p_bases -U -${params.always_trim_3p_bases}" : ""
+
+  // trim TruSeq-style cutadapt
+  // see: https://cutadapt.readthedocs.io/en/stable/guide.html#illumina-truseq
+  // def truseq_cutadapt = "-a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
+  def truseq_cutadapt = '-a "AGATCGGAAGAGC;min_overlap=8" -A "AGATCGGAAGAGC;min_overlap=8"'
+
+  """
+  cutadapt \
+   $truseq_cutadapt \
+   -q 30,30 \
+   --minimum-length ${params.post_trim_min_length} \
+   -u ${params.always_trim_5p_bases} \
+   -u -${params.always_trim_3p_bases} \
+   $paired_trimming \
+   -o ${sample_id}_R1_f1.fastq \
+   --cores=${task.cpus} \
+   $paired_output \
+   $initial_fastq 
+  """
+
+}
+
+/*
+ Use cutadapt to trim off PCR primers
+*/
+process trim_PCR_primers {
+  publishDir "${params.post_trim_fastqc_dir}", mode:'link', pattern:"*.json"
+  label 'lowmem_threaded'                                                                
+
+  input:
+  tuple val(sample_id), path(initial_fastq) from samples_ch_second_trim
 
   output:
   tuple val(sample_id), path("*_f.fastq") optional true into post_trim_qc_ch
@@ -270,7 +313,6 @@ process trim_adapters_and_low_quality {
   tuple val(sample_id), path("*_f.fastq") optional true into post_trim_count_ch
   path ("*cutadapt.json") 
 
-  // TODO: put adapters as a param (?)
   script:
 
   // this handles paired-end data, in which case must specify a paired output file
@@ -279,25 +321,19 @@ process trim_adapters_and_low_quality {
   // fixed # of bases to trim
   def paired_trimming = initial_fastq[1] ? "-U $params.always_trim_5p_bases -U -${params.always_trim_3p_bases}" : ""
 
-  // trim TruSeq-style cutadapt
-  // see: https://cutadapt.readthedocs.io/en/stable/guide.html#illumina-truseq
-  def truseq_cutadapt = "-a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
-
   """
   cutadapt \
-   -O 12 \
+   -O 10 \
    -a file:${params.primer_fasta_3p} \
-   -g file:${params.primer_fasta_5p} \
    -A file:${params.primer_fasta_3p} \
+   -g file:${params.primer_fasta_5p} \
    -G file:${params.primer_fasta_5p} \
-   $truseq_cutadapt \
    -q 30,30 \
    --minimum-length ${params.post_trim_min_length} \
-   -u ${params.always_trim_5p_bases} \
-   -u -${params.always_trim_3p_bases} \
    $paired_trimming \
    -o ${sample_id}_R1_f.fastq \
    --json=${sample_id}.cutadapt.json \
+   --cores=${task.cpus} \
    $paired_output \
    $initial_fastq 
   """

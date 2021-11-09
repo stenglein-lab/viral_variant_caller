@@ -148,7 +148,13 @@ addStyle(wb=wb, sheet="summary",
 
 # integer numbers for some columns
 integer_num_style <- createStyle( 
-  numFmt = "0"
+  fontName = "Helvetica",
+  fontSize = 11,
+  numFmt = "0",
+  border = "TopBottomLeftRight",
+  borderColour = getOption("openxlsx.borderColour", "grey"),
+  borderStyle = getOption("openxlsx.borderStyle", "thin"),
+  halign = "left"
 )
 
 addStyle(wb=wb, sheet="summary", 
