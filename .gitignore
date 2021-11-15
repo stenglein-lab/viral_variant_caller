@@ -1,5 +1,4 @@
 .nextflow*
-fastq/
 refseq/*.fasta*
 refseq/*.gff*
 refseq/*.dict

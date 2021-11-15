@@ -42,11 +42,17 @@ params.host_bt_min_score = "60"
 params.host_bt_threads = "8"
 
 
-// SARS-CoV-2 USA/WA1 (Genbank accession MN985325), Wuhan-1 (NC_045512) reference sequence, 
-// or a reference seq of your choosing
+// -------------------------
+// Virus reference sequence
+// -------------------------
+//
+// Call variants relative to the SARS-CoV-2 reference sequence (Wuhan-1, NC_045512)
+// or to the USA/WA1 strain (MN985325), 
+// or to a reference seq of your choosing
+//
 params.refseq_dir = "${baseDir}/refseq/"
-params.refseq_name = "MN985325"
-// params.refseq_name = "NC_045512"
+params.refseq_name = "NC_045512"
+// params.refseq_name = "MN985325"
 params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
 params.refseq_genbank = "${params.refseq_dir}/${params.refseq_name}.gb"
 params.refseq_bt_index = "${params.refseq_dir}/${params.refseq_name}"
