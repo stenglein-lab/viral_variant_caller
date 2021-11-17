@@ -821,7 +821,7 @@ process call_dataset_consensus {
   bcftools index ${vcfs[1]}.gz
 
   bcftools concat ${vcfs[0]}.gz ${vcfs[1]}.gz | bcftools call -c | vcfutils.pl vcf2fq > consensus.fastq
-  seqtk seq -aQ64 -q20 -n N consensus.fastq > ${sample_id}_consensus.fasta
+  seqtk seq -aQ33 -q20 -n N consensus.fastq > ${sample_id}_consensus.fasta
   """
 }
 */
