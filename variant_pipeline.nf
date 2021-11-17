@@ -788,7 +788,7 @@ process call_dataset_consensus {
   samtools mpileup -uf ${params.refseq_fasta} sorted_input.bam | bcftools call -c | vcfutils.pl vcf2fq > consensus.fastq
   # Convert .fastq to .fasta and set bases of quality lower than 20 to N
   # the sed here adds in sample ID to the fasta header line, otherwise they all just have the same name 
-  seqtk seq -aQ64 -q20 -n N consensus.fastq | sed s/">"/">${sample_id}_"/ > ${sample_id}_consensus.fasta
+  seqtk seq -aQ33 -q20 -n N consensus.fastq | sed s/">"/">${sample_id}_"/ > ${sample_id}_consensus.fasta
   """
 }
 
