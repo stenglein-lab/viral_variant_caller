@@ -1,4 +1,4 @@
-name: variant_conda_environment
+name: pangolin
 channels:
   - bioconda
   - conda-forge
