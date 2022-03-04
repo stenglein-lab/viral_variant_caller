@@ -23,3 +23,4 @@ dependencies:
   - r-egg=0.4.*
   - r-pheatmap=1.0.*
   - r-pdftools=2.3.*
+  - r-desctools=0.99.*

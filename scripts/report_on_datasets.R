@@ -11,6 +11,7 @@ if (!interactive()) {
   completeness_file = args[2]
   pangolin_file = args[3]
   minimum_fraction_called = args[4]
+  pango_synonyms_file = args[5]
   output_dir="./"
 } else {
   # if running via RStudio
@@ -18,6 +19,7 @@ if (!interactive()) {
   completeness_file = "../results/all_consensus_completeness.txt"
   pangolin_file = "../results/pangolin_lineage_report.csv"
   minimum_fraction_called = 0.95
+  pango_synonyms_file = "../results/lineage_synonyms.txt"
   output_dir="../results/"
 }
 
@@ -45,9 +47,13 @@ pangolin_df <- read.delim(pangolin_file, sep=",", header=T)
 # parse out N content from Pangolin
 pangolin_df$pangolin_fraction_N <-  as.numeric(str_match(pangolin_df$note, "N_content:([01].\\d+)")[,2])
 
+# mapping of pango -> WHO labels for variants
+pango_synonyms <- read.delim(pango_synonyms_file, sep="\t", header=T)
+
 # merge tables
 df <- left_join(completeness_df, depth_df)
 df <- left_join(df, pangolin_df, by=c("dataset" = "taxon"))
+df <- left_join(df, pango_synonyms, by=c("lineage" = "pango_lineage"))
 
 # relationship between depth of coverage and fraction of genome called
 ggplot(df) +
@@ -113,7 +119,7 @@ report_df <- df %>%
   arrange(-fraction_called) %>% 
   select(dataset, fraction_called, reference_sequence, 
                            median_depth, mean_depth, 
-                           lineage, ambiguity_score, 
+                           lineage, who_label, ambiguity_score, 
                            version, pangolin_version, 
                            pangoLEARN_version, pango_version, status)  %>%
   rename(pangolin_status = status,

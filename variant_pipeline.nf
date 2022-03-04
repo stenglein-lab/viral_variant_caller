@@ -104,7 +104,8 @@ params.duplicate_cutoff = "0.98"
 params.min_depth_for_variant_call="40"
 params.min_allele_freq="0.03"
 
-
+// an [optional] file containing an encryption key
+params.key_file = "${baseDir}/.key.txt"
 
 // TODO: command line arg processing and validating 
 
@@ -118,8 +119,14 @@ params.min_allele_freq="0.03"
  These fastq files represent the main input to this workflow
 */
 Channel
-    .fromFilePairs("${params.fastq_dir}/*_R{1,2}*.fastq*", size: -1, checkIfExists: true, maxDepth: 1)
-    .into {samples_ch_qc; samples_ch_trim; samples_ch_count}
+  .fromFilePairs("${params.fastq_dir}/*_R{1,2}*.fastq*", size: -1, checkIfExists: true, maxDepth: 1)
+  // this map gets rid of any _S\d+ at the end of sample IDs but leaves fastq
+  // names alone.  E.g. strip _S1 from the end of a sample ID..  
+  // This is typically sample #s from Illumina basecalling.
+  // could cause an issue if sequenced the same sample with 
+  // multiple barcodes so was repeated on a sample sheet. 
+  .map{ [ it[0].replaceFirst( /_S\d+$/ ,"") , it[1] ] }                           
+  .into {samples_ch_qc; samples_ch_trim; samples_ch_count; sample_ids_ch}
 
 
 /*
@@ -871,59 +878,125 @@ process calculate_consensus_completeness {
 
   output:
   path("*consensus_completeness.txt") into individual_consensus_completeness_ch
-  tuple val(sample_id), env(fraction_complete), path(consensus_fasta) into triage_consensus_ch
+  tuple path("*fraction_complete.txt"), path(consensus_fasta) into triage_consensus_ch
+  tuple path("*fraction_complete.txt"), path(consensus_fasta) into triage_consensus_fail_ch
 
   shell:
   def fraction_complete = 0
   '''
   fraction_complete=`!{params.scripts_bindir}/determine_consensus_completeness.pl !{consensus_fasta}`
+  echo $fraction_complete  > "!{sample_id}_fraction_complete.txt"
   echo $fraction_complete | awk '{ print "!{sample_id}" "\t" $0; }'  > "!{sample_id}_consensus_completeness.txt"
-  # !{params.scripts_bindir}/determine_consensus_completeness.pl !{consensus_fasta} | awk '{ print "!{sample_id}" "\t" $0; }'  > "!{sample_id}_consensus_completeness.txt"
-  # echo la dee da
   '''
 
 }
 
+
 /*
    Triage consensus sequences based on whether they satisfy a particular pass/fail criteria
    For now, must be > 95% complete (95% of bases have to be not Ns)
+   Set this cutoff using params.minimum_fraction_called
 */
+triage_consensus_ch
+  .filter{ Float.parseFloat(it[0].text) >= params.minimum_fraction_called }
+  .map { it[1] }
+  .into { consensus_fasta_ch ; consensus_fasta_sufficient_ch }
 
-process triage_consensus_sequences {
-  publishDir "${params.consensus_out_dir}", mode:'link',
-    // this code block sorts consensus sequences into two directories
-    // based on whether they are sufficiently complete or not
-    saveAs: { filename -> 
-                if (filename.endsWith("_PASS")) { 
-                  def newName = filename.replaceAll("_PASS", "") 
-                  "sufficiently_complete/$newName" 
-                }
-                else {
-                  def newName = filename.replaceAll("_FAIL", "") 
-                  "insufficiently_complete/$newName"
-                }
-            }
+triage_consensus_fail_ch
+  .filter{ Float.parseFloat(it[0].text) < params.minimum_fraction_called }
+  .map { it[1] }
+  .set { consensus_fasta_insufficient_ch }
 
 
+/*
+  Output fasta with sufficient coverage
+
+  This simply uses publishDir to put a copy of the fasta in a designated output directory
+*/
+process output_fasta_with_sufficient_coverage {
+  publishDir "${params.consensus_out_dir}/${params.consensus_pass_dir}", mode:'link'
 
   input:
-  tuple val(sample_id), val(fraction_complete), path(consensus_fasta) from triage_consensus_ch
+  path (consensus_fasta) from consensus_fasta_sufficient_ch
 
   output:
-  path ("*consensus.fasta*")
+  path (consensus_fasta) into sufficient_cov_ch
 
   script:
-    // triage consensus sequences based on whether they are sufficiently complete
-    // doing it this way is awkward - perhaps try to make more elegant
-    if( Float.parseFloat(fraction_complete) >= params.minimum_fraction_called)
-       """
-       ln $consensus_fasta "${sample_id}_consensus.fasta_PASS"
-       """
-    else
-       """
-       ln $consensus_fasta "${sample_id}_consensus.fasta_FAIL"
-       """
+  """
+  touch $consensus_fasta 
+  """
 }
+
+/*
+  Output fasta with insufficient coverage
+
+  This simply uses publishDir to put a copy of the fasta in a designated output directory
+*/
+process output_fasta_with_insufficient_coverage {
+  publishDir "${params.consensus_out_dir}/${params.consensus_fail_dir}", mode:'link'
+
+  input:
+  path (consensus_fasta) from consensus_fasta_insufficient_ch
+
+  output:
+  path (consensus_fasta) into insufficient_cov_ch
+
+  script:
+  """
+  touch $consensus_fasta 
+  """
+}
+
+/*
+  This process outputs a tsv file that maps pango lineage IDs to WHO variant labels
+  For instance, B.1.1.529 (Pango) == Omicron (WHO)
+*/
+process tabulate_lineage_synonyms {
+  publishDir "${params.outdir}", mode:'link'                               
+
+  output:
+  path("lineage_synonyms.txt") into lineage_synonyms_ch
+
+  script:
+  """
+  # download the cov-lineages constellations repository, which contains info about 
+  # mapping pango lineage IDS -> WHO synonyms for variants
+  # e.g. B.A.1 == "omicron"
+  curl -OL https://github.com/cov-lineages/constellations/archive/refs/heads/main.zip
+  unzip main.zip 
+
+  # this R script will output a tsv file that maps pango lineages -> WHO names for variants
+  # if the organization of the cov-lineages repository changes it will fail...
+  Rscript ${params.R_bindir}/tabulate_lineage_synonyms.R "./constellations-main/constellations/definitions/" > lineage_synonyms.txt
+  """
+}
+
+/*
+  This process optionally encrypts sample IDs for submission to public databases
+*/
+process encrypt_sample_IDs {
+  publishDir "${params.outdir}", mode:'link'                               
+
+  input:
+  // the map{it[0]} here pulls out the first element (the sample IDs)
+  // from the tuple.  I.e. it ignores fastq files (2nd element of the tuple).
+  // collect merges all these samples_ids into a single list
+  val (sample_ids) from sample_ids_ch.map{it[0]}.collect()
+
+  output:
+  path("encrypted_sample_ids.txt") into encrypted_ids_ch
+  path("encrypted_sample_ids.txt") into encrypted_ids_gisaid_ch
+
+  script:
+  def sample_ids_text = sample_ids.join(" ")
+  """
+  Rscript ${params.R_bindir}/encrypt_sample_ids.R ${params.key_file} $sample_ids_text > encrypted_sample_ids.txt
+  """
+
+}
+
+
 
 /*
    Concatenate the consensus completeness info into a single file to be fed to a reporting script
@@ -1024,18 +1097,18 @@ process report_on_datasets {
   path(consensus_completeness) from consensus_completeness_ch
   path(average_depth_xls) from average_depth_ch
   path(pangolin_lineage_report) from pangolin_report_ch
+  path(pango_lineage_synonyms) from lineage_synonyms_ch
 
   output:
+  path("dataset_summary.xlsx") into dataset_summary_ch
   path("*.xlsx") 
   path("*.pdf") 
 
   script:
   """
-  Rscript ${params.R_bindir}/report_on_datasets.R $average_depth_xls $consensus_completeness $pangolin_lineage_report ${params.minimum_fraction_called}
+  Rscript ${params.R_bindir}/report_on_datasets.R $average_depth_xls $consensus_completeness $pangolin_lineage_report ${params.minimum_fraction_called} $pango_lineage_synonyms
   """
 }
-
-
 
 
 /* 
@@ -1171,7 +1244,6 @@ process tabulate_snpeff_variants {
   """
 }
 
-
 process tabulate_fastq_counts {
   publishDir "${params.outdir}", mode: 'link'
 
@@ -1188,3 +1260,49 @@ process tabulate_fastq_counts {
   Rscript ${params.R_bindir}/process_fastq_counts.R ${params.R_bindir} ${all_count_files}
   """
 }
+
+process encrypt_fasta_sample_ids {
+  publishDir "${params.outdir}", mode:'link'                               
+
+  input:
+  // path(all_fasta) from consensus_fasta_ch.map{it[1]}.collect()
+  path(all_fasta) from consensus_fasta_ch.collect()
+  path(encrypted_ids) from encrypted_ids_ch
+  
+  output:
+  path("consensus_sequences.fasta") into encrypted_fasta_ch
+  path("consensus_sequences_original_ids.fasta") into non_encrypted_fasta_ch
+
+  script:
+  """
+  # concatenate all fasta into one file with original sample IDs
+  cat $all_fasta > consensus_sequences_original_ids.fasta 
+
+  # replace names in fasta with encrypted IDs
+  ${params.scripts_bindir}/replace_fasta_sample_ids.pl consensus_sequences_original_ids.fasta $encrypted_ids > consensus_sequences.fasta
+  """
+
+}
+
+/*
+  This process prepares files suitable for uploading to GISAID
+*/
+/*
+process prepare_gisaid_submission_files {
+  publishDir "${params.outdir}", mode:'link'                               
+
+  input:
+  path(all_fasta) from encrypted_fasta_ch
+  path(dataset_summary) from dataset_summary_ch
+  path(encrypted_ids) from encrypted_ids_gisaid_ch
+
+  output:
+  path ("*.csv") into gisaid_csv_ch
+  path ("*.fasta") into gisaid_fasta_ch
+
+  script:
+  """
+  Rscript ${params.R_bindir}/prepare_gisaid_submission_files.R $all_fasta $dataset_summary $encrypted_ids ${params.minimum_fraction_called}
+  """
+}
+*/
