@@ -1,125 +1,53 @@
 #!/usr/bin/env nextflow
 
 /*
-    Stenglein lab variant analysis nextflow pipeline 
+    A pipeline to determine SARS-CoV-2 consensus sequences and prepare
+    information for submissiont to GISAID and other public databases
 
-    October 22, 2020 
+    March 5, 2022
 
     Mark Stenglein
 */
 
+// TODO: more robust command line arg validation 
 
-// TODO: command line options and parameter checking
-
-
-params.fastq_dir = "$baseDir/fastq/"
-params.outdir = "$baseDir/results"                                                       
-params.initial_fastqc_dir = "${params.outdir}/initial_fastqc/" 
-params.post_trim_fastqc_dir = "${params.outdir}/post_trim_fastqc/" 
-params.counts_out_dir = "${params.outdir}/fastq_counts/"                        
-params.fastq_out_dir = "${params.outdir}/trimmed_fastq/"                        
-params.bam_out_dir = "${params.outdir}/bam/"                                    
-params.vcf_out_dir = "${params.outdir}/vcf/"  
-params.consensus_out_dir = "${params.outdir}/consensus_sequences/"  
-params.consensus_pass_dir = "sufficiently_complete/"  
-params.consensus_fail_dir = "insufficiently_complete/"  
-params.pangolin_out_dir = "${params.outdir}/pangolin/"
-params.ditector_out_dir = "${params.outdir}/ditector/"  
-
-// --------------------
-// Host cell filtering
-// --------------------
-
-// Human samples: use human genome for host filtering
-params.host_bt_index = "/home/databases/human/GCRh38"
-params.host_bt_suffix = "human_genome"
-params.host_bt_min_score = "60"
-params.host_bt_threads = "8"
-
-
-// -------------------
-// Reference sequence
-// -------------------
-// SARS-CoV-2 Wuhan-1 (NC_045512) reference sequence, 
-// or a reference seq of your choosing
-params.refseq_dir = "${baseDir}/refseq/"
-params.refseq_name = "NC_045512"
-params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"
-params.refseq_genbank = "${params.refseq_dir}/${params.refseq_name}.gb"
-params.refseq_bt_index = "${params.refseq_dir}/${params.refseq_name}"
-params.refseq_bt_min_score = "120"
-
-params.refseq_bwa_threads = "8"
-
-
-// ------------------
-// Trimming settings
-// ------------------
-params.always_trim_5p_bases = "0" 
-params.always_trim_3p_bases = "0" 
-params.post_trim_min_length = "30" 
-
-params.primer_fasta_5p = "${params.refseq_dir}/swift_primers.5p.fasta"
-params.primer_fasta_3p = "${params.refseq_dir}/swift_primers.3p.fasta"
-
-
-// plot mapping stats
-params.plot_mapping_stats = false
-
-// where are R scripts found...
-params.R_bindir="${baseDir}/scripts"
-params.scripts_bindir="${baseDir}/scripts"
-
-// minimum fraction called (fraction non-N bases in consensus sequence)
-// to have consensus sequence pass
-params.minimum_fraction_called = 0.95
-
-// Call and annotate intra-host variants?
-// not imlemented yet
-// params.call_variants = true
-
-// DI-tector info
-params.ditector_script="${params.scripts_bindir}/DI-tector_06.py"
-params.run_ditector = false
-
-// conda for snpEFF
-params.snpeff_cfg = "${params.refseq_dir}/snpEff.config" 
-params.snpeff_data = "${params.refseq_dir}/snpeff_data/"
-params.snpeff_threads = "8"
-
-// regions to omit from BSQR step
-params.ignore_regions="${params.refseq_dir}/ignore_regions.bed"
-
-// optional custom variant annotation
-params.custom_annotations = true
-params.custom_annotations_bed = "${params.refseq_dir}/voc_positions.bed"
-
-// flag to optionally run cd-hit to collapse non-unique reads
-// skip this step by default
-params.skip_collapse_to_unique = true
-// cd-hit-dup cutoff for collapsing reads with >= this much fractional similarity
-params.duplicate_cutoff = "0.98"
-
-// min depth and allele freq for calling variants and indels                    
-params.min_depth_for_variant_call="40"
-params.min_allele_freq="0.03"
-
-// an [optional] file containing an encryption key
-params.key_file = "${baseDir}/.key.txt"
-
-// TODO: command line arg processing and validating 
-
-// TODO: check that appropriate refseq files exist (fasta, gb, etc.)
-
-// TODO: BSQR fails in case of no mapping reads... deal with this possibility 
-
-// TODO: handle fastq.gz compressed files 
+/*                                                                              
+  Check input parameters                                                        
+*/                                                                              
+def check_params_and_input () {                                                 
+                                                                                
+  // TODO:
+  // check_metadata()                                                           
+  // check indexes exist
+                                                                                
+  // This list includes a list of files or paths that are required              
+  // to exist.  Check that they exist and fail if not.                          
+  checkPathParamList = [                                                        
+    params.input_dir,                                                           
+    params.fastq_dir,                                                           
+    params.refseq_dir,                                                           
+    params.script_dir,                                                          
+    params.refseq_fasta,                                                             
+    params.refseq_genbank,                                                             
+    params.primer_fasta_5p,                                                            
+    params.primer_fasta_3p,                                                            
+    params.primers                                                              
+  ]                                                                             
+  log.info("Checking for required input paths and files...")                    
+  for (param in checkPathParamList) { if (param) { file(param, checkIfExists: true) } }
+                                                                                
+}                                                                               
+                                                                                
+/*                                                                              
+  Check parameters and input                                                    
+*/                                                                              
+check_params_and_input()
 
 /*
  These fastq files represent the main input to this workflow
 */
 Channel
-  .fromFilePairs("${params.fastq_dir}/*_R{1,2}*.fastq*", size: -1, checkIfExists: true, maxDepth: 1)
+  .fromFilePairs("${params.fastq_dir}/${params.fastq_pattern}", size: -1, checkIfExists: true, maxDepth: 1)
   // this map gets rid of any _S\d+ at the end of sample IDs but leaves fastq
   // names alone.  E.g. strip _S1 from the end of a sample ID..  
   // This is typically sample #s from Illumina basecalling.
@@ -132,7 +60,6 @@ Channel
 /*
    Setup some initial indexes and dictionaries needed by downstream processes.
    Only do this once at beginning.
-   TODO: remove initial .dict file
 */
 process setup_indexes {
 
@@ -184,13 +111,6 @@ process setup_indexes {
   rm -f "${params.refseq_dir}/${params.refseq_name}.dict"
   gatk CreateSequenceDictionary -R ${params.refseq_fasta}
 
-  # --------
-  # Pangolin
-  # --------
-  # Have pangolin update itself to be sure using latest pangolin lineage info
-  # TODO: didn't work to have pangolin in an environment with other tools, for some reason
-  #       So move this to a separate process upstream of using pangolin 
-  # pangolin --update
   """
 }
 
@@ -237,11 +157,6 @@ process initial_fastq_count {
   zcat -f !{initial_fastq[0]} | wc -l | xargs bash -c 'echo $(($0 / 4))' | awk '{print "!{sample_id}" "\tinitial\t" $1}' > "!{sample_id}_initial_count.txt"
   '''
 }
-
-/* 
-Collect and compress all raw fastq files --> deliverables
-*/
-// TODO: 
 
 /*
  Use multiqc to merge initial fastqc reports
@@ -640,7 +555,7 @@ process tabulate_stats {
   script:
   """
   cat $mapping_stats_files > all.mapping_stats
-  Rscript ${params.R_bindir}/plot_mapping_stats.R ${params.R_bindir} all.mapping_stats
+  Rscript ${params.script_dir}/plot_mapping_stats.R ${params.script_dir} all.mapping_stats
   """
 }
 
@@ -690,7 +605,7 @@ process tabulate_depth {
   script:
   """
   cat $depth_files > all.depth
-  Rscript ${params.R_bindir}/plot_depth.R ${params.R_bindir} all.depth
+  Rscript ${params.script_dir}/plot_depth.R ${params.script_dir} all.depth
   """
 }
 
@@ -707,7 +622,7 @@ process call_dvgs {
   // this param is set to true
   // this will also cause downstream processes to be skipped
   when:
-  params.run_ditector
+  params.call_variants && params.run_ditector
 
   output:
   // TODO: DI-tector fails when no reads: check for this?
@@ -767,7 +682,7 @@ process tabulate_dvg_calls {
 
   script:
   """
-  Rscript ${params.R_bindir}/process_ditector_output.R ${params.R_bindir} \
+  Rscript ${params.script_dir}/process_ditector_output.R ${params.script_dir} \
     $all_depth \
     $di_count_files
   """
@@ -780,6 +695,8 @@ process call_snvs {
   label 'lowmem_threaded'
   publishDir "${params.vcf_out_dir}", mode:'link'                               
 
+  when:
+  params.call_variants 
 
   input:
   tuple val(sample_id), path(input_bam) from post_bsqr_snv_ch
@@ -816,6 +733,8 @@ process call_indels {
   label 'lowmem_threaded'
   publishDir "${params.vcf_out_dir}", mode:'link'                               
 
+  when:
+  params.call_variants
 
   input:
   tuple val(sample_id), path(input_bam) from post_bsqr_indel_ch
@@ -851,7 +770,6 @@ process call_dataset_consensus {
   tuple val(sample_id), path(input_bam) from post_bsqr_consensus_ch
 
   output:
-  tuple val(sample_id), path("${sample_id}_consensus.fasta") into post_merge_vcf_ch
   tuple val(sample_id), path("${sample_id}_consensus.fasta") into consensus_completeness_fasta_ch
   tuple val(sample_id), path("${sample_id}_consensus.fasta") into assign_pangolin_ch
 
@@ -884,7 +802,7 @@ process calculate_consensus_completeness {
   shell:
   def fraction_complete = 0
   '''
-  fraction_complete=`!{params.scripts_bindir}/determine_consensus_completeness.pl !{consensus_fasta}`
+  fraction_complete=`!{params.script_dir}/determine_consensus_completeness.pl !{consensus_fasta}`
   echo $fraction_complete  > "!{sample_id}_fraction_complete.txt"
   echo $fraction_complete | awk '{ print "!{sample_id}" "\t" $0; }'  > "!{sample_id}_consensus_completeness.txt"
   '''
@@ -968,7 +886,7 @@ process tabulate_lineage_synonyms {
 
   # this R script will output a tsv file that maps pango lineages -> WHO names for variants
   # if the organization of the cov-lineages repository changes it will fail...
-  Rscript ${params.R_bindir}/tabulate_lineage_synonyms.R "./constellations-main/constellations/definitions/" > lineage_synonyms.txt
+  Rscript ${params.script_dir}/tabulate_lineage_synonyms.R "./constellations-main/constellations/definitions/" > lineage_synonyms.txt
   """
 }
 
@@ -991,7 +909,7 @@ process encrypt_sample_IDs {
   script:
   def sample_ids_text = sample_ids.join(" ")
   """
-  Rscript ${params.R_bindir}/encrypt_sample_ids.R ${params.key_file} $sample_ids_text > encrypted_sample_ids.txt
+  Rscript ${params.script_dir}/encrypt_sample_ids.R ${params.key_file} $sample_ids_text > encrypted_sample_ids.txt
   """
 
 }
@@ -1018,6 +936,23 @@ process tabulate_consensus_completeness {
 }
 
 /*
+   Update pangolin info for up-to-date lineage assignment
+*/
+
+process update_pangolin_info {
+  
+  conda './environment_setup/pangolin.yaml'
+
+  output: 
+  val ("pangolin_update_complete") into pangolin_update_ch
+
+  shell:
+  '''
+  pangolin --update
+  '''
+}
+
+/*
    Assign consensus sequence to a PANGO lineage using Pangolin
 
    Might be better to do this on a single concatenated file
@@ -1031,6 +966,7 @@ process assign_to_pango_lineage {
 
   input: 
   tuple val(sample_id), path(consensus_fasta) from assign_pangolin_ch
+  val (pangolin_updated_flag) from pangolin_update_ch
 
   output: 
   path ("*lineage_report.csv") into collect_pangolin_ch
@@ -1081,7 +1017,7 @@ process report_on_completeness {
 
   script:
   """
-  Rscript ${params.R_bindir}/analyze_genome_completeness.R $average_depth_xls $consensus_completeness
+  Rscript ${params.script_dir}/analyze_genome_completeness.R $average_depth_xls $consensus_completeness
   """
 }
 */
@@ -1106,7 +1042,7 @@ process report_on_datasets {
 
   script:
   """
-  Rscript ${params.R_bindir}/report_on_datasets.R $average_depth_xls $consensus_completeness $pangolin_lineage_report ${params.minimum_fraction_called} $pango_lineage_synonyms
+  Rscript ${params.script_dir}/report_on_datasets.R $average_depth_xls $consensus_completeness $pangolin_lineage_report ${params.minimum_fraction_called} $pango_lineage_synonyms
   """
 }
 
@@ -1236,7 +1172,7 @@ process tabulate_snpeff_variants {
 
   script:
   """
-  Rscript ${params.R_bindir}/analyze_snpeff_variants.R ${params.R_bindir} \
+  Rscript ${params.script_dir}/analyze_snpeff_variants.R ${params.script_dir} \
     ${params.min_allele_freq} \
     $all_depth \
     ${params.min_depth_for_variant_call} \
@@ -1257,7 +1193,7 @@ process tabulate_fastq_counts {
 
   script:
   """
-  Rscript ${params.R_bindir}/process_fastq_counts.R ${params.R_bindir} ${all_count_files}
+  Rscript ${params.script_dir}/process_fastq_counts.R ${params.script_dir} ${all_count_files}
   """
 }
 
@@ -1279,7 +1215,7 @@ process encrypt_fasta_sample_ids {
   cat $all_fasta > consensus_sequences_original_ids.fasta 
 
   # replace names in fasta with encrypted IDs
-  ${params.scripts_bindir}/replace_fasta_sample_ids.pl consensus_sequences_original_ids.fasta $encrypted_ids > consensus_sequences.fasta
+  ${params.script_dir}/replace_fasta_sample_ids.pl consensus_sequences_original_ids.fasta $encrypted_ids > consensus_sequences.fasta
   """
 
 }
@@ -1302,7 +1238,7 @@ process prepare_gisaid_submission_files {
 
   script:
   """
-  Rscript ${params.R_bindir}/prepare_gisaid_submission_files.R $all_fasta $dataset_summary $encrypted_ids ${params.minimum_fraction_called}
+  Rscript ${params.script_dir}/prepare_gisaid_submission_files.R $all_fasta $dataset_summary $encrypted_ids ${params.minimum_fraction_called}
   """
 }
 */

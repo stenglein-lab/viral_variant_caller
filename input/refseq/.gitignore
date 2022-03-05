@@ -1,0 +1,5 @@
+*.fasta.*
+*.idx
+*.dict
+snpeff_data
+snpEff.config

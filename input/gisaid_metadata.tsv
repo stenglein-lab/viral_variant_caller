@@ -1,0 +1,24 @@
+# This file contains metadata that will be used for GISAID submission of SARS-CoV-2 sequencces
+#
+
+# gisaid ID of submitter
+submitter	markstenglein
+
+# name of fasta file containing all consensus sequences
+fn	consensus_sequences.fasta
+
+covv_type	betacoronavirus
+covv_passage	Original
+covv_gender	unknown
+covv_patient_age	unknown
+covv_patient_status	unknown
+covv_location	North America/USA/Colorado/Colorado
+covv_host	Human
+covv_seq_technology	Illumina
+covv_orig_lab	Colorado State University Center for Vector-Borne Infectious Diseases
+covv_orig_lab_addr	200 West Lake Street 1434 Campus Delivery Fort Collins, CO 80523 USA
+covv_subm_lab	Colorado State University Center for Vector-Borne Infectious Diseases
+covv_subm_lab_addr	200 West Lake Street 1434 Campus Delivery Fort Collins, CO 80523 USA
+
+# authors in alphabetical order
+covv_authors	Ebel, Greg; Ehrhart, Nicole; Kapuscinski, Marylee; Luc, August; Pabilonia, Kristy; Sexton, Nicole; Snell, Ashley; Stenglein, Mark;
