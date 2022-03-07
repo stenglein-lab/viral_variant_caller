@@ -11,36 +11,35 @@
 
 // TODO: more robust command line arg validation 
 
-/*                                                                              
-  Check input parameters                                                        
-*/                                                                              
-def check_params_and_input () {                                                 
-                                                                                
+/*
+  Check input parameters
+*/
+def check_params_and_input () {
+
   // TODO:
-  // check_metadata()                                                           
+  // check_metadata()
   // check indexes exist
-                                                                                
-  // This list includes a list of files or paths that are required              
-  // to exist.  Check that they exist and fail if not.                          
-  checkPathParamList = [                                                        
-    params.input_dir,                                                           
-    params.fastq_dir,                                                           
-    params.refseq_dir,                                                           
-    params.script_dir,                                                          
-    params.refseq_fasta,                                                             
-    params.refseq_genbank,                                                             
-    params.primer_fasta_5p,                                                            
-    params.primer_fasta_3p,                                                            
-    params.primers                                                              
-  ]                                                                             
-  log.info("Checking for required input paths and files...")                    
+
+  // This list includes a list of files or paths that are required
+  // to exist.  Check that they exist and fail if not.
+  checkPathParamList = [
+    params.input_dir,
+    params.fastq_dir,
+    params.refseq_dir,
+    params.script_dir,
+    params.refseq_fasta,
+    params.refseq_genbank,
+    params.primer_fasta_5p,
+    params.primer_fasta_3p
+  ]
+  log.info("Checking for required input paths and files...")
   for (param in checkPathParamList) { if (param) { file(param, checkIfExists: true) } }
-                                                                                
-}                                                                               
-                                                                                
-/*                                                                              
-  Check parameters and input                                                    
-*/                                                                              
+
+}
+
+/* 
+  Check parameters and input
+*/
 check_params_and_input()
 
 /*
@@ -818,7 +817,7 @@ process calculate_consensus_completeness {
 triage_consensus_ch
   .filter{ Float.parseFloat(it[0].text) >= params.minimum_fraction_called }
   .map { it[1] }
-  .into { consensus_fasta_ch ; consensus_fasta_sufficient_ch }
+  .into { consensus_fasta_individual_ch ; consensus_fasta_sufficient_ch }
 
 triage_consensus_fail_ch
   .filter{ Float.parseFloat(it[0].text) < params.minimum_fraction_called }
@@ -891,9 +890,9 @@ process tabulate_lineage_synonyms {
 }
 
 /*
-  This process optionally encrypts sample IDs for submission to public databases
+  This process optionally obfuscate sample IDs for submission to public databases
 */
-process encrypt_sample_IDs {
+process obfuscate_sample_IDs {
   publishDir "${params.outdir}", mode:'link'                               
 
   input:
@@ -903,13 +902,12 @@ process encrypt_sample_IDs {
   val (sample_ids) from sample_ids_ch.map{it[0]}.collect()
 
   output:
-  path("encrypted_sample_ids.txt") into encrypted_ids_ch
-  path("encrypted_sample_ids.txt") into encrypted_ids_gisaid_ch
+  path("obfuscated_sample_ids.txt") into obfuscated_ids_gisaid_ch
 
   script:
   def sample_ids_text = sample_ids.join(" ")
   """
-  Rscript ${params.script_dir}/encrypt_sample_ids.R ${params.key_file} $sample_ids_text > encrypted_sample_ids.txt
+  Rscript ${params.script_dir}/obfuscate_sample_ids.R ${params.key_file} $sample_ids_text > obfuscated_sample_ids.txt
   """
 
 }
@@ -1046,40 +1044,6 @@ process report_on_datasets {
   """
 }
 
-
-/* 
-  Consensus calling using same lofreq vcfs that defined called variants
-
-  ** couldn't get lofreq vcf to work as input for bcftools ** 
-
-*/
-/*
-process call_dataset_consensus {
-  // publishDir "${params.outdir}", mode:'link'
-
-  input:
-  tuple val(sample_id), path(vcfs) from post_indel_call_consensus_ch
-    .concat(post_snv_call_consensus_ch)
-    .groupTuple()
-
-  output:
-  tuple val(sample_id), path("${sample_id}_consensus.fasta") into post_merge_vcf_ch
-
-  script:
-  """
-  # convert to compressed/indexed vcf to make bcftools happy
-  bcftools view ${vcfs[0]} -O z > ${vcfs[0]}.gz
-  bcftools index ${vcfs[0]}.gz
-  bcftools view ${vcfs[1]} -O z > ${vcfs[1]}.gz
-  bcftools index ${vcfs[1]}.gz
-
-  bcftools concat ${vcfs[0]}.gz ${vcfs[1]}.gz | bcftools call -c | vcfutils.pl vcf2fq > consensus.fastq
-  seqtk seq -aQ64 -q20 -n N consensus.fastq > ${sample_id}_consensus.fasta
-  """
-}
-*/
-
-
 /* 
  use snpEff to annotate vcfs 
  */
@@ -1197,25 +1161,23 @@ process tabulate_fastq_counts {
   """
 }
 
-process encrypt_fasta_sample_ids {
+/*
+  Replace the fasta sample IDs with sample IDs in submission metadata
+  so that fasta sequence names match names in metadata
+*/
+process collect_consensus_fasta {
   publishDir "${params.outdir}", mode:'link'                               
 
   input:
-  // path(all_fasta) from consensus_fasta_ch.map{it[1]}.collect()
-  path(all_fasta) from consensus_fasta_ch.collect()
-  path(encrypted_ids) from encrypted_ids_ch
+  path(all_fasta) from consensus_fasta_individual_ch.collect()
   
   output:
-  path("consensus_sequences.fasta") into encrypted_fasta_ch
-  path("consensus_sequences_original_ids.fasta") into non_encrypted_fasta_ch
+  path("consensus_sequences_original_ids.fasta") into consensus_fasta_ch
 
   script:
   """
   # concatenate all fasta into one file with original sample IDs
   cat $all_fasta > consensus_sequences_original_ids.fasta 
-
-  # replace names in fasta with encrypted IDs
-  ${params.script_dir}/replace_fasta_sample_ids.pl consensus_sequences_original_ids.fasta $encrypted_ids > consensus_sequences.fasta
   """
 
 }
@@ -1223,22 +1185,23 @@ process encrypt_fasta_sample_ids {
 /*
   This process prepares files suitable for uploading to GISAID
 */
-/*
 process prepare_gisaid_submission_files {
   publishDir "${params.outdir}", mode:'link'                               
+  
+  when:
+  params.prepare_gisaid
 
   input:
-  path(all_fasta) from encrypted_fasta_ch
+  path(all_fasta) from consensus_fasta_ch
   path(dataset_summary) from dataset_summary_ch
-  path(encrypted_ids) from encrypted_ids_gisaid_ch
+  path(obfuscated_ids) from obfuscated_ids_gisaid_ch
 
   output:
-  path ("*.csv") into gisaid_csv_ch
   path ("*.fasta") into gisaid_fasta_ch
+  path ("*.xls") into gisaid_xls_ch
 
   script:
   """
-  Rscript ${params.script_dir}/prepare_gisaid_submission_files.R $all_fasta $dataset_summary $encrypted_ids ${params.minimum_fraction_called}
+  Rscript ${params.script_dir}/prepare_gisaid_submission_files.R $all_fasta $dataset_summary $obfuscated_ids ${params.minimum_fraction_called} ${params.gisaid_metadata_file}
   """
 }
-*/
