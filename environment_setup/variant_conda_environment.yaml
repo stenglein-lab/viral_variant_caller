@@ -24,3 +24,4 @@ dependencies:
   - r-pheatmap=1.0.*
   - r-pdftools=2.3.*
   - r-desctools=0.99.*
+  - r-jsonlite=1.8.*
