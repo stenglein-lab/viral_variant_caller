@@ -98,7 +98,7 @@ prepare_gisaid_date <- function(dataset_id){
   day         = date_fields[,4]
   if (is.na(year)) {
     
-    message(paste0("WARNING: could not parse year out of sample ID: ", sample_id))
+    message(paste0("WARNING: could not parse year out of sample ID: ", dataset_id))
     message(       "         this will result in invalid GISAID submission data.")
     gisaid_date <- NA_character_
     
@@ -184,8 +184,8 @@ gisaid_df <- rbind(long_names_row, gisaid_df)
 wb <- createWorkbook(paste0(output_dir, "gisaid_submission.xls"))
 modifyBaseFont(wb, fontSize = 11, fontColour = "black", fontName = "Helvetica")
 addWorksheet(wb, "Submissions")
-writeData(wb, "Submissions", gisaid_df)
-saveWorkbook(wb, paste0(output_dir, "gisaid_submission.xls"), overwrite = TRUE)
+writeData(wb, "Submissions", gisaid_df, na.string=NA_character_)
+saveWorkbook(wb, paste0(output_dir, "gisaid_submission.xlsx"), overwrite = TRUE)
 
 
 
