@@ -401,8 +401,11 @@ process bwa_align_to_refseq {
   label 'lowmem_threaded'                                                                
 
   input:
-  tuple val(sample_id), path(input_fastq) from post_host_ch_variants
-
+  // the filter{size()} functionality here checks if fastq file is empty,
+  // which causes bwa to crash
+  // see: https://stackoverflow.com/questions/47401518/nextflow-is-an-input-file-empty
+  // this means that fastq that are empty at this stage will just stop progress through pipeline
+  tuple val(sample_id), path(input_fastq) from post_host_ch_variants.filter{ it[1].getAt(0).size() > 0 }
   output:
   tuple val(sample_id), path("${sample_id}.bam") into post_bwa_align_ch
 
@@ -434,6 +437,26 @@ process bwa_align_to_refseq {
   '''
 }
 
+/* 
+  Count the # of mapped reads in the bam file and output to channel
+  This is to avoid gatk crashing in case of empty bam files
+*/
+process count_bam_records {
+  label 'lowmem_non_threaded'                                                                
+
+  input:
+  tuple val(sample_id), path(input_bam) from post_bwa_align_ch
+
+  output:
+  tuple env(bam_records), val(sample_id), path(input_bam) into post_bwa_count_ch
+
+  """
+  # count # of aligned reads: this assumes bam only contains mapped reads...
+  bam_records=`samtools view -S -F 0x4 $input_bam | grep -v ^@ | wc -l`
+  """
+
+}
+
 /*
  This process performs gatk "Base Quality Score Recalibration" (BQSR).
  BQSR is "a data pre-processing step that detects systematic errors made by 
@@ -448,11 +471,9 @@ process apply_bsqr {
   label 'lowmem_non_threaded'                                                                
   publishDir "${params.bam_out_dir}", mode:'link', pattern: "*.bam"             
 
-
   input:
-  tuple val(sample_id), path(input_bam) from post_bwa_align_ch
-  // this input value will prevent this process from running before the 
-  // appropriate indexes are setup by the setup_indexes process 
+  // exclude bam with no mapped reads
+  tuple env(bam_records), val(sample_id), path(input_bam) from post_bwa_count_ch.filter { Integer.parseInt(it[0]) > 0 }
 
   output:
   tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_snv_ch
@@ -902,6 +923,7 @@ process obfuscate_sample_IDs {
   val (sample_ids) from sample_ids_ch.map{it[0]}.collect()
 
   output:
+  path("obfuscated_sample_ids.txt") into obfuscated_ids_report_ch
   path("obfuscated_sample_ids.txt") into obfuscated_ids_gisaid_ch
 
   script:
@@ -909,9 +931,7 @@ process obfuscate_sample_IDs {
   """
   Rscript ${params.script_dir}/obfuscate_sample_ids.R ${params.key_file} $sample_ids_text > obfuscated_sample_ids.txt
   """
-
 }
-
 
 
 /*
@@ -1000,28 +1020,6 @@ process tabulate_pangolin_info {
 
 
 /*
-  Report on completeness
-*/
-/*
-process report_on_completeness {
-  publishDir "${params.outdir}", mode:'link'                               
-
-  input:
-  path(consensus_completeness) from consensus_completeness_ch
-  path(average_depth_xls) from average_depth_ch
-
-  output:
-  path("*.pdf") into consensus_report_ch
-
-  script:
-  """
-  Rscript ${params.script_dir}/analyze_genome_completeness.R $average_depth_xls $consensus_completeness
-  """
-}
-*/
-
-
-/*
   Report on datasets
 */
 process report_on_datasets {
@@ -1032,15 +1030,16 @@ process report_on_datasets {
   path(average_depth_xls) from average_depth_ch
   path(pangolin_lineage_report) from pangolin_report_ch
   path(pango_lineage_synonyms) from lineage_synonyms_ch
+  path(obfuscated_ids) from obfuscated_ids_report_ch
 
   output:
-  path("dataset_summary.xlsx") into dataset_summary_ch
+  path("*dataset_summary.xlsx") into dataset_summary_ch
   path("*.xlsx") 
   path("*.pdf") 
 
   script:
   """
-  Rscript ${params.script_dir}/report_on_datasets.R $average_depth_xls $consensus_completeness $pangolin_lineage_report ${params.minimum_fraction_called} $pango_lineage_synonyms
+  Rscript ${params.script_dir}/report_on_datasets.R ${params.script_dir} $average_depth_xls $consensus_completeness $pangolin_lineage_report ${params.minimum_fraction_called} $pango_lineage_synonyms ${params.output_prefix} $obfuscated_ids
   """
 }
 
@@ -1151,13 +1150,13 @@ process tabulate_fastq_counts {
   path(all_count_files) from post_count_initial_ch.concat(post_count_trim_ch, post_count_host_ch, post_count_refseq_aligned_ch).collect()
 
   output:
-  path ("all_read_counts.txt") 
-  path ("summarized_read_counts.txt") 
-  path ("filtering_plots.pdf") 
+  path ("*all_read_counts.txt") 
+  path ("*summarized_read_counts.txt") 
+  path ("*filtering_plots.pdf") 
 
   script:
   """
-  Rscript ${params.script_dir}/process_fastq_counts.R ${params.script_dir} ${all_count_files}
+  Rscript ${params.script_dir}/process_fastq_counts.R ${params.script_dir} ${params.output_prefix} ${all_count_files} 
   """
 }
 
@@ -1172,12 +1171,12 @@ process collect_consensus_fasta {
   path(all_fasta) from consensus_fasta_individual_ch.collect()
   
   output:
-  path("consensus_sequences_original_ids.fasta") into consensus_fasta_ch
+  path("*consensus_sequences_original_ids.fasta") into consensus_fasta_ch
 
   script:
   """
   # concatenate all fasta into one file with original sample IDs
-  cat $all_fasta > consensus_sequences_original_ids.fasta 
+  cat $all_fasta > "${params.output_prefix}consensus_sequences_original_ids.fasta"
   """
 
 }
@@ -1198,10 +1197,10 @@ process prepare_gisaid_submission_files {
 
   output:
   path ("*.fasta") into gisaid_fasta_ch
-  path ("*.xls") into gisaid_xls_ch
+  path ("*.xlsx") into gisaid_xls_ch
 
   script:
   """
-  Rscript ${params.script_dir}/prepare_gisaid_submission_files.R $all_fasta $dataset_summary $obfuscated_ids ${params.minimum_fraction_called} ${params.gisaid_metadata_file}
+  Rscript ${params.script_dir}/prepare_gisaid_submission_files.R ${params.script_dir} $all_fasta $dataset_summary $obfuscated_ids ${params.minimum_fraction_called} ${params.gisaid_metadata_file} ${params.output_prefix}
   """
 }

@@ -1,3 +1,5 @@
 #!/bin/bash 
  
-nextflow run main.nf -resume -with-report -with-dag flowchart.pdf -profile local,conda
+# analyze runs 1-5 datasets
+# MDS 3/23/2022
+nextflow run main.nf -resume -profile local,conda --fastq_dir ../runs_1_to_5_concatenated_fastq --key_file $HOME/.key.txt

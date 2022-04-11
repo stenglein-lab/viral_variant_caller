@@ -14,13 +14,15 @@ if (!interactive()) {
   # if running from Rscript
   args = commandArgs(trailingOnly=TRUE)
   # TODO: check CLAs
-  r_bindir=args[1]
-  # -c(1:1) --> all but the first 1 element of the list
-  count_file_names = args[-c(1:1)]
+  r_bindir      = args[1]
+  output_prefix = args[2]
+  # -c(1:2) --> all but the first 2 elements of the list
+  count_file_names = args[-c(1:2)]
   output_directory="./"
 } else {
   # if running via RStudio
   r_bindir = "." 
+  output_prefix = paste0(Sys.Date(), "_")
   count_file_names = list.files(path = "../results/fastq_counts", pattern = "*count.txt$", full.names = T)
   output_directory="../results/"
 }
@@ -54,13 +56,13 @@ counts_df$count_type <- fct_relevel(counts_df$count_type, c("initial",
                                     "post_host_filtered",
                                     "refseq_aligned"))
 
-write.table(counts_df, file=paste0(output_directory, "all_read_counts.txt"), sep="\t", row.names=F, col.names=T, quote=F)
+write.table(counts_df, file=paste0(output_directory, output_prefix, "all_read_counts.txt"), sep="\t", row.names=F, col.names=T, quote=F)
 
 counts_summary_df <- counts_df %>% group_by(count_type) %>% summarize(total_counts = sum(count),
                                                                       mean_counts = mean(count),
                                                                       median_counts = median(count))
 
-write.table(counts_summary_df, file=paste0(output_directory, "summarized_read_counts.txt"), sep="\t", row.names=F, col.names=T, quote=F)
+write.table(counts_summary_df, file=paste0(output_directory, output_prefix, "summarized_read_counts.txt"), sep="\t", row.names=F, col.names=T, quote=F)
 
 # plot the data
 
@@ -140,4 +142,4 @@ norm_counts_p
 # save plots to PDF
 # use gridExtra marrangeGrob function to lay them out, 2 per page
 plots_to_plot <- list(per_dataset_p, all_dataset_p, raw_counts_p, norm_counts_p)
-ggsave(paste0(output_directory, "filtering_plots.pdf"), marrangeGrob(grobs = plots_to_plot, nrow=2, ncol=1, top=NULL), height=10, width=7.5, units="in")
+ggsave(paste0(output_directory, output_prefix, "filtering_plots.pdf"), marrangeGrob(grobs = plots_to_plot, nrow=2, ncol=1, top=NULL), height=10, width=7.5, units="in")

@@ -68,7 +68,7 @@ generate_sample_id <- function (sample_id, obfuscation_key){
       id_2 = Vigenere(id_2, key=obfuscation_key)
     }
     
-    new_id <- paste0(id_1, "_", id_2, "_", date)
+    new_id <- paste0(id_1, id_2, "_", date)
   }
   else {
     # ID wasn't in expected format: leave as is

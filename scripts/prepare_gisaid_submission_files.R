@@ -11,20 +11,24 @@ if (!interactive()) {
   # if running from Rscript
   args = commandArgs(trailingOnly=TRUE)
   # TODO: check CLAs
-  consensus_fasta = args[1]
-  dataset_summary = args[2]
-  obfuscated_ids = args[3]
-  min_fraction_called = args[4]
-  metadata_file = args[5]
+  script_dir = args[1]
+  consensus_fasta = args[2]
+  dataset_summary = args[3]
+  obfuscated_ids = args[4]
+  min_fraction_called = args[5]
+  metadata_file = args[6]
+  output_prefix = args[7]
   output_dir="./"
 } else {
   # if running via RStudio (for developing/troubleshooting)
   # put in some sensible defaults
+  script_dir = "./"
   consensus_fasta = "../results/consensus_sequences_original_ids.fasta"
   dataset_summary = "../results/dataset_summary.xlsx"
   obfuscated_ids = "../results/obfuscated_sample_ids.txt"
   min_fraction_called = 0.95
   metadata_file = "../input/gisaid_metadata.tsv"
+  output_prefix = paste0(Sys.Date(), "_")
   output_dir="../results/"
 }
 
@@ -44,6 +48,20 @@ names(metadata) <- t(metadata_in[, "key"])
 # filter out rows below cutoff and any NTC data
 dataset_pass <- dataset_summary %>% 
   filter(fraction_called >= min_fraction_called & !str_detect(dataset, "NTC"))
+
+# this sourced file contains a function named extract_date_from_dataset_id 
+# that pulls out dates from sample IDs
+source (paste0(script_dir, "/extract_metadata_from_sample_id.R"))
+
+# parse date from dataset ID and return in gisaid-expected format
+dataset_pass$covv_collection_date <- lapply(dataset_pass$dataset, extract_date_from_dataset_id)
+
+# pull year out of gisaid date
+dataset_pass$year <- str_match(dataset_pass$covv_collection_date, "(^[:digit:]{4})")[,2]
+
+# exclude samples for which we don't have year of sample collection.  
+dataset_pass <- dataset_pass %>% 
+  filter(!is.na(year))
 
 # join in obfuscated IDS
 dataset_pass <- left_join(dataset_pass, obfuscated_ids, by=c("dataset" = "original_id"))
@@ -82,60 +100,16 @@ colnames(long_names_row) <- gisaid_columns
 long_names_row[nrow(long_names_row) + 1,] <- gisaid_long_names
 
 
-# this function pulls out date and returns it in a GISAID-compatible format
-prepare_gisaid_date <- function(dataset_id){
-  
-  # pull out date in GISAID format
-  # parse out date metadata from sample IDs
-  # expected to be in the sample ID (dataset name)
-  # in the format: YYYYMMDD or YYYY
-  date_regex <- "_(20[0-9]{2})([0-9]{2})([0-9]{2})"
-  date_fields <- str_match(dataset_id, date_regex)
-  
-  whole_match = date_fields[,1]
-  year        = date_fields[,2]
-  month       = date_fields[,3]
-  day         = date_fields[,4]
-  if (is.na(year)) {
-    
-    message(paste0("WARNING: could not parse year out of sample ID: ", dataset_id))
-    message(       "         this will result in invalid GISAID submission data.")
-    gisaid_date <- NA_character_
-    
-  } else if (!is.na(year) & !is.na(month) & !is.na(day)) {
-    
-    # the field covv_collection_date should be in the format:
-    # 2021-03-31
-    gisaid_date <- paste0(year, "-", month, "-", day)
-    
-  }
-  else {
-    
-    # or if no month/day info, just the year
-    # 2021
-    gisaid_date <- year
-    
-  }
-  
-  gisaid_date
-}
-
-# parse date from dataset ID and return in gisaid-expected format
-dataset_pass$covv_collection_date <- lapply(dataset_pass$dataset, prepare_gisaid_date)
-
-# pull year out of gisaid date
-dataset_pass$year <- str_match(dataset_pass$covv_collection_date, "(^[:digit:]{4})")[,2]
-
 # per GISAID conventions, name should be in the format:
 # hCoV-19/Country/Identifier/Year
 # e.g. 
-# hCoV-19/USA/Colorado_CSU_XYZ/2021
+# hCoV-19/USA/Colorado_XYZ/2021
 dataset_pass <- dataset_pass %>% 
-  mutate(covv_virus_name = paste0("hCoV-19/USA/Colorado_CSU_", obfuscated_id, "/", year))
+  mutate(covv_virus_name = paste0("hCoV-19/USA/CO_", obfuscated_id, "/", year))
 
 # covv_coverage 
 dataset_pass <- dataset_pass %>% 
-  mutate(covv_coverage <- mean_depth)
+  mutate(covv_coverage = sprintf("%.1f", mean_depth))
 
 
 # ---------------
@@ -161,6 +135,9 @@ for (row in 1:nrow(dataset_pass)) {
 }
 
 # output fasta with replaced names
+
+# prepend filename to include date or whatever prefix is specified
+metadata$fn <- paste0(output_prefix,  metadata$fn) 
 cat(replaced_fasta_string, file=paste0(output_dir, metadata$fn), sep="")
 
 # fill in ouput data table
@@ -181,11 +158,12 @@ for (name in names(dataset_pass)){
 gisaid_df <- rbind(long_names_row, gisaid_df)
 
 # write out the excel file 
-wb <- createWorkbook(paste0(output_dir, "gisaid_submission.xls"))
+excel_filename <- paste0(output_prefix, "gisaid_submission.xlsx") 
+wb <- createWorkbook(paste0(output_dir, excel_filename))
 modifyBaseFont(wb, fontSize = 11, fontColour = "black", fontName = "Helvetica")
 addWorksheet(wb, "Submissions")
 writeData(wb, "Submissions", gisaid_df, na.string=NA_character_)
-saveWorkbook(wb, paste0(output_dir, "gisaid_submission.xlsx"), overwrite = TRUE)
+saveWorkbook(wb, paste0(output_dir, excel_filename), overwrite = TRUE)
 
 
 
