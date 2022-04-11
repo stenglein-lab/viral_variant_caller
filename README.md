@@ -1,9 +1,8 @@
-# viral_variant_caller
+# viral_variant_caller / cdphe_sequencing branch
 
-This repository contains a pipeline for calling single nucleotide and structural variants in viral populations. 
+This repository branch contains a pipeline to generate SARS-CoV-2 sequences for a project to do SARS-CoV-2 genome sequencing from Colorado.
 
-
-### Installation
+### To analyze a dataset
 
 To download this pipeline, run:
 
@@ -11,57 +10,47 @@ To download this pipeline, run:
 git clone -b cdphe_sequencing https://github.com/stenglein-lab/viral_variant_caller.git
 ```
 
-**Need to update this documentation to reflect CDPHE-sequencing specific changes**
-
 
 ### Usage
 
-
-
-Before you run this pipeline, you'll have to make sure that dependencies (software on which this pipeline depends) are in place.  The best way to do this is to use the included [conda environment](./environment_setup/variant_conda_environment.yaml).  Please see the [instructions to install and setup this environment](./environment_setup/README.md) for instructions on how to install and initialize this environment.
-
-To run the pipeline, you'll need to move your datasets (fastq files) into a new directory named `fastq` in the `viral_variant_caller` directory with the datasets (fastq) files that you wish to analyze.  Then run:
+A typical invocation of the pipeline would be a command like:
 
 ```
-nextflow run variant_pipeline.nf 
+nextflow run main.nf -resume -profile local,conda --fastq_dir ../2022_3_1_run_4_fastq
 ```
 
-To resume the pipeline if it stopped for some reason
-
-```
-nextflow run variant_pipeline.nf -resume
-```
+This invocation:
+- takes advantage of nextflow's built-in ability to resume pipelines (-resume flag)
+- specifies the local and conda profiles, both specified in [nextflow.config](./nextflow.config)
+- points to the directory containing the fastq files that will be analyzed (--fastq_dir parameter)
 
 [See here](https://github.com/stenglein-lab/taxonomy_pipeline/blob/master/docs/tutorial.md#section_screen) for an explanation of using the screen utility to avoid dropped connections and premature termination of a pipeline.
 
 
 ### Viral reference sequence
 
-This pipeline is by default set up to call variants relative to a SARS-CoV-2 reference genome, but it could be reconfigured pretty easily to call variants relative to a different reference sequence.  This can be done by changing these parameters in `variant_pipeline.nf`:
+This pipeline is by default set up to call variants relative to a SARS-CoV-2 reference genome, but it could be reconfigured pretty easily to call variants relative to a different reference sequence.  This can be done by changing these parameters in `[nextflow.config](./nextflow.config)` (or on the command line).  
 
 ```
-// SARS-CoV-2 Wuhan-1 (NC_045512) reference sequence, 
-// or a reference seq of your choosing                                          
-params.refseq_dir = "${baseDir}/refseq/"                                        
-params.refseq_name = "NC_045512"                                             
-params.refseq_fasta = "${params.refseq_dir}/${params.refseq_name}.fasta"        
-params.refseq_genbank = "${params.refseq_dir}/${params.refseq_name}.gb" 
+  // SARS-CoV-2 Wuhan-1 (NC_045512) reference sequence,
+  // or a reference seq of your choosing
+  refseq_name          = "NC_045512"
+  refseq_fasta         = "${refseq_dir}/${refseq_name}.fasta"
+  refseq_genbank       = "${refseq_dir}/${refseq_name}.gb"
 ```
 
 The pipeline is expecting your reference sequence to exist in the refseq directory in fasta and genbank format.  These can both be downloaded from NCBI, or exported from software like geneious.  The refseq directory should be populated with appropriate files.  So, in the above example, the pipeline is expecting the refseq directory to contain files named NC_045512.fasta and NC_045512.gb.  This is the RefSeq SARS-CoV-2 sequence.  
 
 ### Host filtering
 
-A step in this pipline removes host-derived reads.  To modify the host genome used, modify these parameters in the main nextflow pipeline file:
+A step in this pipline removes host-derived reads.  By default it maps against the human genome.  To modify which host genome is used, modify these parameters in `nextflow.config` or by overriding these values as [command line arguments to nextflow](https://www.nextflow.io/docs/latest/cli.html#pipeline-parameters).
+
 ```
-params.host_bt_index = "/home/databases/primates/agm_genome"                    
-params.host_bt_suffix = "agm_genome"                                            
+  // Human samples: use human genome for host filtering
+  host_bt_index      = "/home/databases/human/GCRh38"
 ```
 
-(agm here stands for African green monkey, because when this pipeline was developed, we were analyzing virus grown in Vero cells, which are from that species of monkey.
-
-You will need an [existing bowtie2 index](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#the-bowtie2-build-indexer) to exist for the pipeline to do host filtering.  
-
+You will need an [existing bowtie2 index](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#the-bowtie2-build-indexer) to exist for the pipeline to do host filtering.  In the above example, a bowtie2 index named GCRh38 exists in the directory `/home/databases/human/`.
 
 ### Dependencies
 
@@ -77,35 +66,23 @@ This pipeline depends on the scripts in this repository as well as the following
 - [bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml)
 - [samtools](http://samtools.github.io/)
 - [R](https://www.r-project.org/)
+- [Pangolin](https://cov-lineages.org/resources/pangolin.html)
 
-These dependencies are handled via the conda environment defined in this repository.  [See here for instructions](./environment_setup/README.md) on creating this environment. 
+These dependencies are handled via the conda environment [defined](./environment_setup/variant_conda_environment.yaml) in this repository.  To use this conda environment, you must run the pipeline with `-profile conda` specified.   The first time you run with this profile, the pipeline will create the environment and cache it in a directory named conda_cacheDir in your home directory.  You can override this cache location by changing this parameter defined in `nextflow.config`:
 
+```
+    conda.cacheDir         = "$HOME/conda_cacheDir"
+```
 
 ### Results
 
-The results of this pipeline will be output to a results subdirectory. The main pipeline outputs are:
+The results of this pipeline will be output to a results subdirectory.  Results include:
 
-- **variant_summary.xlsx:** this spreadsheet contains a matrix of variant frequencies of all detected variants in all datasets. 
-- **consensus_sequences:** a directory containing a consensus sequence for each dataset (variants >50% will change consensus relative to the original refseq)
-- **sample_correlation_heatmap.pdf:** A heatmap of variants and clustering of variants and datasets
+- **<date>_consensus_sequences.fasta:** consenensus sequences ready to be deposited to GISAID or another database
+- **<date>_gisaid_submission.xlsx:** an excel metadata file for GISAID submission.  Note this has to be manually converted to an .xls format file by opening and saving from Excel (GISAID can't handle .xlsx files and the openxlsx R package can't write .xls files).
+- **<date>_dataset_summary.xlsx:** an excel file containing information about all the samples, even those that are not complete enough to submit to GISAID.
 - **initial_qc_report.html, post_trim_qc_report.html:** QC reports of raw data before and after adapter/quality trimming
 - **coverage_plots.pdf:** coverage plots over virus reference sequence 
 - **Median_dephts.xlsx:** median coverage values over virus reference sequence in each dataset
 - **filtering_plots.pdf:** plots of #/fraction of reads remaining after various filtering steps
 
-[See here](https://github.com/stenglein-lab/taxonomy_pipeline/blob/master/docs/tutorial.md#-transferring-files-to-and-from-servers) for an explanation of how to transfer files from a server using a utility like sftp or cyberduck
-
-#### A note on the snpEff database
-
-I was getting 'ERROR_CHROMOSOME_NOT_FOUND' errors in the snpEff vcf output, and to fix it had to modify the genbank file I downloaded from genbank to change the version field from: 
-```
-VERSION     MN985325.1
-```
-
-to:
-
-```
-VERSION     MN985325
-```
-
-This could possibly be avoided by using GTF annotation instead of GB?
