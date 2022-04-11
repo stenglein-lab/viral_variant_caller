@@ -29,7 +29,7 @@ This invocation:
 
 ### Viral reference sequence
 
-This pipeline is by default set up to call variants relative to a SARS-CoV-2 reference genome, but it could be reconfigured pretty easily to call variants relative to a different reference sequence.  This can be done by changing these parameters in `[nextflow.config](./nextflow.config)` (or on the command line).  
+This pipeline is by default set up to call variants relative to a SARS-CoV-2 reference genome, but it could be reconfigured pretty easily to call variants relative to a different reference sequence.  This can be done by changing these parameters in [nextflow.config](./nextflow.config) (or by [overriding them](https://www.nextflow.io/docs/latest/cli.html#pipeline-parameters) on the command line).  
 
 ```
   // SARS-CoV-2 Wuhan-1 (NC_045512) reference sequence,
@@ -78,9 +78,9 @@ These dependencies are handled via the conda environment [defined](./environment
 
 The results of this pipeline will be output to a results subdirectory.  Results include:
 
-- **<date>_consensus_sequences.fasta:** consenensus sequences ready to be deposited to GISAID or another database
-- **<date>_gisaid_submission.xlsx:** an excel metadata file for GISAID submission.  Note this has to be manually converted to an .xls format file by opening and saving from Excel (GISAID can't handle .xlsx files and the openxlsx R package can't write .xls files).
-- **<date>_dataset_summary.xlsx:** an excel file containing information about all the samples, even those that are not complete enough to submit to GISAID.
+- **consensus_sequences.fasta:** consenensus sequences ready to be deposited to GISAID or another database
+- **gisaid_submission.xlsx:** an excel metadata file for GISAID submission.  Note this has to be manually converted to an .xls format file by opening and saving from Excel (GISAID can't handle .xlsx files and the openxlsx R package can't write .xls files).
+- **dataset_summary.xlsx:** an excel file containing information about all the samples, even those that are not complete enough to submit to GISAID.
 - **initial_qc_report.html, post_trim_qc_report.html:** QC reports of raw data before and after adapter/quality trimming
 - **coverage_plots.pdf:** coverage plots over virus reference sequence 
 - **Median_dephts.xlsx:** median coverage values over virus reference sequence in each dataset
