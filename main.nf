@@ -9,8 +9,6 @@
     Mark Stenglein
 */
 
-// TODO: more robust command line arg validation 
-
 /*
   Check input parameters
 */
@@ -57,13 +55,27 @@ Channel
 
 
 /*
-   Setup some initial indexes and dictionaries needed by downstream processes.
-   Only do this once at beginning.
+  Setup some initial indexes and dictionaries needed by downstream processes.
+  Only do this once at beginning.
+
+  All this setup used to be in a single process but I separated it out because
+  each process needs its own singularity image
+  
+  Chain the processes together so at the end of the chain all indexes will be
+  complete.
+
 */
-process setup_indexes {
+process setup_lofreq_index {
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/lofreq:2.1.5--py39h43839c7_5"
+  } else {                                                                      
+      container "quay.io/biocontainers/lofreq:2.1.5--py39h43839c7_5"
+  }      
 
   output:
-  val("indexes_complete") into post_index_setup_ch
+  val("lofreq_index_complete") into post_lofreq_index_ch
 
   script:
   """
@@ -71,7 +83,27 @@ process setup_indexes {
   # lofreq fasta index
   # ------------------
   lofreq faidx ${params.refseq_fasta}
+  """
+}
 
+
+process setup_snpeff_index {
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/snpeff:5.0--hdfd78af_1"
+  } else {                                                                      
+      container "quay.io/biocontainers/snpeff:5.0--hdfd78af_1"
+  }      
+
+  input:
+  val("lofreq_index_complete") from post_lofreq_index_ch
+
+  output:
+  val("snpeff_index_complete") into post_snpeff_index_ch
+
+  script:
+  """
   # ----------------
   # setup snpEFF db
   # ----------------
@@ -89,12 +121,50 @@ process setup_indexes {
 
   # could make it from genbank format file
   snpEff build -c ${params.snpeff_cfg} -nodownload -v -genbank -dataDir ${params.snpeff_data} ${params.refseq_name} > ${params.snpeff_data}/${params.refseq_name}.build
+  """
+}
 
+process setup_bwa_index {
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/bwa:0.7.8--h7132678_7"
+  } else {                                                                      
+      container "quay.io/biocontainers/bwa:0.7.8--h7132678_7"
+  }      
+
+  input:
+  val("snpeff_index_complete") from post_snpeff_index_ch
+
+  output:
+  val("bwa_index_complete") into post_bwa_index_ch
+
+  script:
+  """
   # -----------------------
   # bwa index viral refseq
   # -----------------------
   bwa index ${params.refseq_fasta}
+  """
+}
 
+process setup_gatk_index {
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/gatk4:4.2.6.0--hdfd78af_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/gatk4:4.2.6.0--hdfd78af_0"
+  }      
+
+  input:
+  val("bwa_index_complete") from post_bwa_index_ch
+
+  output:
+  val("all_indexes_complete") into post_index_setup_ch
+
+  script:
+  """
   # -----------------
   # GATK index setup
   # -----------------
@@ -105,7 +175,7 @@ process setup_indexes {
   # reference sequence.  GATK will ignore this base for basecall quality score recalibration 
   printf "%s\t1\t1\n" ${params.refseq_name} > ${params.ignore_regions}
 
-  gatk IndexFeatureFile --feature-file ${params.ignore_regions} 
+  gatk IndexFeatureFile --input ${params.ignore_regions} 
 
   rm -f "${params.refseq_dir}/${params.refseq_name}.dict"
   gatk CreateSequenceDictionary -R ${params.refseq_fasta}
@@ -113,18 +183,25 @@ process setup_indexes {
   """
 }
 
+
 /*
  Run fastqc on input fastq 
 */
 process initial_qc {
   label 'lowmem_non_threaded'                                                                
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/fastqc:0.11.9--0"  
+  } else {                                                                      
+      container "quay.io/biocontainers/fastqc:0.11.9--0"                        
+  }     
+
   input:
   tuple val(sample_id), path(initial_fastq) from samples_ch_qc
 
   output:
   val(sample_id) into post_initial_qc_ch
-  // TODO: count
 
   script:
   """
@@ -163,6 +240,13 @@ process initial_fastq_count {
 process initial_multiqc {
   publishDir "${params.outdir}", mode:'link'
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/multiqc:1.11--pyhdfd78af_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/multiqc:1.11--pyhdfd78af_0"              
+  }    
+
   input:
   val(all_sample_ids) from post_initial_qc_ch.collect()
 
@@ -182,6 +266,13 @@ process initial_multiqc {
 process trim_illumina_adapters_and_low_quality {
   // publishDir "${params.post_trim_fastqc_dir}", mode:'link', pattern:"*.json"
   label 'lowmem_threaded'                                                                
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+    container "https://depot.galaxyproject.org/singularity/cutadapt:3.5--py39h38f01e4_0"
+  } else {                                                                      
+    container "quay.io/biocontainers/cutadapt:3.5--py39h38f01e4_0"              
+  }     
 
   input:
   tuple val(sample_id), path(initial_fastq) from samples_ch_trim
@@ -224,6 +315,13 @@ process trim_illumina_adapters_and_low_quality {
 process trim_PCR_primers {
   publishDir "${params.post_trim_fastqc_dir}", mode:'link', pattern:"*.json"
   label 'lowmem_threaded'                                                                
+ 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+    container "https://depot.galaxyproject.org/singularity/cutadapt:3.5--py39h38f01e4_0"
+  } else {                                                                      
+    container "quay.io/biocontainers/cutadapt:3.5--py39h38f01e4_0"              
+  }     
 
   input:
   tuple val(sample_id), path(initial_fastq) from samples_ch_second_trim
@@ -258,7 +356,6 @@ process trim_PCR_primers {
    $paired_output \
    $initial_fastq 
   """
-
 }
 
 /*
@@ -288,6 +385,13 @@ process trimmed_fastq_count {
 process post_trim_qc {
   label 'lowmem_non_threaded'
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/fastqc:0.11.9--0"  
+  } else {                                                                      
+      container "quay.io/biocontainers/fastqc:0.11.9--0"                        
+  }     
+
   input:
   tuple val(sample_id), path(input_fastq) from post_trim_qc_ch
 
@@ -307,6 +411,13 @@ process post_trim_qc {
 */
 process post_trim_multiqc {
   publishDir "${params.outdir}", mode:'link'
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/multiqc:1.11--pyhdfd78af_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/multiqc:1.11--pyhdfd78af_0"              
+  }    
 
   input:
   val(all_sample_ids) from post_trim_multiqc_ch.collect()
@@ -330,6 +441,13 @@ process post_trim_multiqc {
 process host_filtering {
   // publishDir "${params.outdir}", pattern: "*_R1_fh.fastq"
   label 'lowmem_threaded'                                                                
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/bowtie2:2.4.5--py39ha4319a6_1"
+  } else {                                                                      
+      container "quay.io/biocontainers/bowtie2:2.4.5--py39ha4319a6_1"           
+  }        
 
   input:
   tuple val(sample_id), path(input_fastq) from post_trim_ch
@@ -386,12 +504,6 @@ process host_filtered_fastq_count {
   '''
 }
 
-/* 
-Collect and compress all host-filtered fastq files --> deliverables
-*/
-// TODO: 
-
-
 
 /*
  Use bwa to align host-filtered reads to the viral reference sequence
@@ -400,14 +512,22 @@ Collect and compress all host-filtered fastq files --> deliverables
 process bwa_align_to_refseq {
   label 'lowmem_threaded'                                                                
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/bwa:0.7.8--h7132678_7"
+  } else {                                                                      
+      container "quay.io/biocontainers/bwa:0.7.8--h7132678_7"
+  }      
+
   input:
   // the filter{size()} functionality here checks if fastq file is empty,
   // which causes bwa to crash
   // see: https://stackoverflow.com/questions/47401518/nextflow-is-an-input-file-empty
   // this means that fastq that are empty at this stage will just stop progress through pipeline
   tuple val(sample_id), path(input_fastq) from post_host_ch_variants.filter{ it[1].getAt(0).size() > 0 }
+
   output:
-  tuple val(sample_id), path("${sample_id}.bam") into post_bwa_align_ch
+  tuple val(sample_id), path("${sample_id}.unsorted.bam") into post_bwa_align_sort_ch
 
 
   // in the following 'shell' code block, 
@@ -433,8 +553,33 @@ process bwa_align_to_refseq {
   bwa mem \
   -t !{params.refseq_bwa_threads} \
   -R $rg \
-  !{params.refseq_fasta} !{input_fastq} | samtools sort -@!{task.cpus} -o !{sample_id}.bam  -
+  !{params.refseq_fasta} !{input_fastq}  > !{sample_id}.unsorted.bam
   '''
+}
+
+/*
+ Sort bwa-aligned bam
+*/
+process sort_refseq_aligned_bam {
+  label 'lowmem_threaded'                                                                
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/samtools:1.14--hb421002_0"               
+  }     
+
+  input:
+  tuple val(sample_id), path(unsorted_bam) from post_bwa_align_sort_ch
+
+  output:
+  tuple val(sample_id), path("${sample_id}.bam") into post_bwa_align_ch
+
+  script:
+  """
+  samtools sort -@${task.cpus} -o ${sample_id}.bam $unsorted_bam
+  """
 }
 
 /* 
@@ -443,6 +588,13 @@ process bwa_align_to_refseq {
 */
 process count_bam_records {
   label 'lowmem_non_threaded'                                                                
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/samtools:1.14--hb421002_0"               
+  }     
 
   input:
   tuple val(sample_id), path(input_bam) from post_bwa_align_ch
@@ -470,6 +622,13 @@ process count_bam_records {
 process apply_bsqr {
   label 'lowmem_non_threaded'                                                                
   publishDir "${params.bam_out_dir}", mode:'link', pattern: "*.bam"             
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/gatk4:4.2.6.0--hdfd78af_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/gatk4:4.2.6.0--hdfd78af_0"
+  }      
 
   input:
   // exclude bam with no mapped reads
@@ -505,6 +664,13 @@ process apply_bsqr {
 process refseq_aligned_read_count {
   label 'lowmem_non_threaded'                                                                
   publishDir "${params.counts_out_dir}", mode:'link'
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/samtools:1.14--hb421002_0"               
+  }     
 
   input:
   tuple val(sample_id), path(bam) from post_bsqr_count_ch
@@ -542,6 +708,13 @@ process refseq_aligned_read_count {
 process tabulate_mapping_stats_one {
   label 'lowmem_non_threaded'
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/samtools:1.14--hb421002_0"               
+  }     
+
   when:
   params.plot_mapping_stats
 
@@ -564,13 +737,17 @@ process tabulate_mapping_stats_one {
 process tabulate_stats {
   publishDir "${params.outdir}", mode:'link'
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity') {                              
+      container "library://stenglein-lab/r_variant_tools/r_variant_tools:1.0.0"
+  } 
+
   input: 
   path(mapping_stats_files) from post_stats_ch.collect()
 
   output: 
   path("mapping_stats_plot.pdf") 
   path("all.mapping_stats") 
-
 
   script:
   """
@@ -592,6 +769,13 @@ process tabulate_stats {
 process tabulate_depth_one {
   label 'lowmem_non_threaded'
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/samtools:1.14--hb421002_0"               
+  }     
+
   input:
   tuple val(sample_id), path(input_bam) from post_bsqr_depth_ch
 
@@ -611,6 +795,11 @@ process tabulate_depth_one {
 */
 process tabulate_depth {
   publishDir "${params.outdir}", mode:'link'
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity') {                              
+      container "library://stenglein-lab/r_variant_tools/r_variant_tools:1.0.0"
+  } 
 
   input: 
   path(depth_files) from post_depth_ch.collect()
@@ -634,6 +823,13 @@ process tabulate_depth {
 */
 process call_dvgs {
   label 'lowmem_threaded'
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/python:3.10"
+  } else {                                                                      
+      container "quay.io/biocontainers/python:3.10"
+  }     
 
   input:
   tuple val(sample_id), path(input_fastq) from post_host_ch_dvg
@@ -693,6 +889,11 @@ process tabulate_dvg_calls {
   label 'lowmem_non_threaded'
   publishDir "${params.outdir}", mode:'link'
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity') {                              
+      container "library://stenglein-lab/r_variant_tools/r_variant_tools:1.0.0"
+  } 
+
   input:
   path(all_depth) from tabulate_dvg_depth_ch
   path(di_count_files) from post_dvg_process_ch.collect()
@@ -714,6 +915,13 @@ process tabulate_dvg_calls {
 process call_snvs {
   label 'lowmem_threaded'
   publishDir "${params.vcf_out_dir}", mode:'link'                               
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/lofreq:2.1.5--py39h43839c7_5"
+  } else {                                                                      
+      container "quay.io/biocontainers/lofreq:2.1.5--py39h43839c7_5"
+  }      
 
   when:
   params.call_variants 
@@ -753,6 +961,13 @@ process call_indels {
   label 'lowmem_threaded'
   publishDir "${params.vcf_out_dir}", mode:'link'                               
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/lofreq:2.1.5--py39h43839c7_5"
+  } else {                                                                      
+      container "quay.io/biocontainers/lofreq:2.1.5--py39h43839c7_5"
+  }      
+
   when:
   params.call_variants
 
@@ -775,7 +990,6 @@ process call_indels {
 }
 
 
-
 /* 
  Call consensus sequences for each dataset 
 
@@ -783,11 +997,73 @@ process call_indels {
  because I couldn't get lofreq vcf to work as input for bcftools
 
 */
-process call_dataset_consensus {
+process call_dataset_consensus_samtools {
   // publishDir "${params.consensus_out_dir}", mode:'link'
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/samtools:1.14--hb421002_0"               
+  }     
 
   input:
   tuple val(sample_id), path(input_bam) from post_bsqr_consensus_ch
+
+  output:
+  tuple val(sample_id), path("${sample_id}.consensus.bam") into consensus_samtools_ch
+
+  script:
+  """
+  # consensus calling according to the strategy outlined here: https://www.biostars.org/p/367626/
+  samtools sort $input_bam -o sorted_input.bam
+  samtools mpileup -uf ${params.refseq_fasta} sorted_input.bam > ${sample_id}.consensus.bam
+  """
+}
+
+/* 
+ Call consensus sequences step 2:  bcftools 
+*/
+process call_dataset_consensus_bcftools {
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/bcftools:1.15.1--h0ea216a_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/bcftools:1.15.1--h0ea216a_0"
+  }     
+
+  input:
+  tuple val(sample_id), path(consensus_bam) from consensus_samtools_ch
+
+  output:
+  tuple val(sample_id), path("${sample_id}_consensus.fastq") into consensus_fastq_ch
+
+  script:
+  """
+  # consensus calling according to the strategy outlined here: https://www.biostars.org/p/367626/
+  bcftools call -c $consensus_bam | vcfutils.pl vcf2fq > ${sample_id}_consensus.fastq
+  """
+}
+
+
+/* 
+ Call consensus sequences for each dataset step 3: seqtk.  
+
+ Use seqtk to convert fastq generated by samtools/bcftools -> a consensus fasta
+*/
+process call_dataset_consensus {
+  // publishDir "${params.consensus_out_dir}", mode:'link'
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/seqtk:1.3--h5bf99c6_3"
+  } else {                                                                      
+      container "quay.io/biocontainers/seqtk:1.3--h5bf99c6_3"                   
+  }       
+
+  input:
+  tuple val(sample_id), path(consensus_fastq) from consensus_fastq_ch
 
   output:
   tuple val(sample_id), path("${sample_id}_consensus.fasta") into consensus_completeness_fasta_ch
@@ -795,15 +1071,11 @@ process call_dataset_consensus {
 
   script:
   """
-  # consensus calling according to the strategy outlined here: https://www.biostars.org/p/367626/
-  samtools sort $input_bam -o sorted_input.bam
-  samtools mpileup -uf ${params.refseq_fasta} sorted_input.bam | bcftools call -c | vcfutils.pl vcf2fq > consensus.fastq
   # Convert .fastq to .fasta and set bases of quality lower than 20 to N
   # the sed here adds in sample ID to the fasta header line, otherwise they all just have the same name 
-  seqtk seq -aQ33 -q20 -n N consensus.fastq | sed s/">.*"/">${sample_id}"/ > ${sample_id}_consensus.fasta
+  seqtk seq -aQ33 -q20 -n N $consensus_fastq | sed s/">.*"/">${sample_id}"/ > ${sample_id}_consensus.fasta
   """
 }
-
 
 
 /*
@@ -819,6 +1091,7 @@ process calculate_consensus_completeness {
   tuple path("*fraction_complete.txt"), path(consensus_fasta) into triage_consensus_ch
   tuple path("*fraction_complete.txt"), path(consensus_fasta) into triage_consensus_fail_ch
 
+  /*
   shell:
   def fraction_complete = 0
   '''
@@ -826,7 +1099,13 @@ process calculate_consensus_completeness {
   echo $fraction_complete  > "!{sample_id}_fraction_complete.txt"
   echo $fraction_complete | awk '{ print "!{sample_id}" "\t" $0; }'  > "!{sample_id}_consensus_completeness.txt"
   '''
+  */
 
+  shell:
+  '''
+  !{params.script_dir}/determine_consensus_completeness.pl !{consensus_fasta} > !{sample_id}_fraction_complete.txt
+  cat !{sample_id}_fraction_complete.txt | awk '{ print "!{sample_id}" "\t" $0; }'  > "!{sample_id}_consensus_completeness.txt"
+  '''
 }
 
 
@@ -893,6 +1172,11 @@ process output_fasta_with_insufficient_coverage {
 process tabulate_lineage_synonyms {
   publishDir "${params.outdir}", mode:'link'                               
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity') {                              
+      container "library://stenglein-lab/r_variant_tools/r_variant_tools:1.0.0"
+  } 
+
   output:
   path("lineage_synonyms.txt") into lineage_synonyms_ch
 
@@ -916,6 +1200,11 @@ process tabulate_lineage_synonyms {
 process obfuscate_sample_IDs {
   publishDir "${params.outdir}", mode:'link'                               
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity') {                              
+      container "library://stenglein-lab/r_variant_tools/r_variant_tools:1.0.0"
+  } 
+
   input:
   // the map{it[0]} here pulls out the first element (the sample IDs)
   // from the tuple.  I.e. it ignores fastq files (2nd element of the tuple).
@@ -929,7 +1218,7 @@ process obfuscate_sample_IDs {
   script:
   def sample_ids_text = sample_ids.join(" ")
   """
-  Rscript ${params.script_dir}/obfuscate_sample_ids.R ${params.key_file} $sample_ids_text > obfuscated_sample_ids.txt
+  Rscript ${params.script_dir}/obfuscate_sample_ids.R ${params.key_file} $sample_ids_text 
   """
 }
 
@@ -959,15 +1248,20 @@ process tabulate_consensus_completeness {
 
 process update_pangolin_info {
   
-  conda './environment_setup/pangolin.yaml'
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/pangolin:4.0.4--pyhdfd78af_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/pangolin:4.0.4--pyhdfd78af_0"
+  }       
 
   output: 
   val ("pangolin_update_complete") into pangolin_update_ch
 
-  shell:
-  '''
-  pangolin --update
-  '''
+  script:
+  """
+  pangolin --update-data --datadir $params.pangolin_datadir
+  """
 }
 
 /*
@@ -980,7 +1274,12 @@ process update_pangolin_info {
 process assign_to_pango_lineage {
   publishDir "${params.pangolin_out_dir}", mode:'link'
   
-  conda './environment_setup/pangolin.yaml'
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/pangolin:4.0.4--pyhdfd78af_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/pangolin:4.0.4--pyhdfd78af_0"
+  }       
 
   input: 
   tuple val(sample_id), path(consensus_fasta) from assign_pangolin_ch
@@ -989,10 +1288,10 @@ process assign_to_pango_lineage {
   output: 
   path ("*lineage_report.csv") into collect_pangolin_ch
 
-  shell:
-  '''
-  pangolin --outfile !{sample_id}_lineage_report.csv !{consensus_fasta}
-  '''
+  script:
+  """
+  pangolin --datadir $params.pangolin_datadir --outfile ${sample_id}_lineage_report.csv ${consensus_fasta}
+  """
 }
 
 /*
@@ -1025,6 +1324,11 @@ process tabulate_pangolin_info {
 process report_on_datasets {
   publishDir "${params.outdir}", mode:'link'                               
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity') {                              
+      container "library://stenglein-lab/r_variant_tools/r_variant_tools:1.0.0"
+  } 
+
   input:
   path(consensus_completeness) from consensus_completeness_ch
   path(average_depth_xls) from average_depth_ch
@@ -1048,6 +1352,13 @@ process report_on_datasets {
  */
 process annotate_variants {
   publishDir "${params.vcf_out_dir}", mode:'link'
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/snpeff:5.1--hdfd78af_1"
+  } else {                                                                      
+      container "quay.io/biocontainers/snpeff:5.1--hdfd78af_1"
+  }      
 
   input:
   tuple val(sample_id), path(vcf) from post_indel_call_ch.concat(post_snv_call_ch)
@@ -1079,6 +1390,13 @@ process annotate_variants {
  */
 process extract_annotated_variant_fields {
   publishDir "${params.vcf_out_dir}", mode:'link'
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/snpeff:5.1--hdfd78af_1"
+  } else {                                                                      
+      container "quay.io/biocontainers/snpeff:5.1--hdfd78af_1"
+  }      
 
   input:
   tuple val(sample_id), path(snp_eff) from post_variant_annotate_ch
@@ -1125,6 +1443,11 @@ process prepend_snp_sift_output {
 process tabulate_snpeff_variants {
   publishDir "${params.outdir}", mode:'link'
 
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity') {                              
+      container "library://stenglein-lab/r_variant_tools/r_variant_tools:1.0.0"
+  } 
+
   input:
   path(all_depth) from analyze_variants_depth_ch
   path(snp_sifts) from post_prepend_snp_sift_ch.collect()
@@ -1145,6 +1468,11 @@ process tabulate_snpeff_variants {
 
 process tabulate_fastq_counts {
   publishDir "${params.outdir}", mode: 'link'
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity') {                              
+      container "library://stenglein-lab/r_variant_tools/r_variant_tools:1.0.0"
+  } 
 
   input:
   path(all_count_files) from post_count_initial_ch.concat(post_count_trim_ch, post_count_host_ch, post_count_refseq_aligned_ch).collect()
@@ -1187,6 +1515,11 @@ process collect_consensus_fasta {
 process prepare_gisaid_submission_files {
   publishDir "${params.outdir}", mode:'link'                               
   
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity') {                              
+      container "library://stenglein-lab/r_variant_tools/r_variant_tools:1.0.0"
+  } 
+
   when:
   params.prepare_gisaid
 

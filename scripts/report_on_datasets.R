@@ -137,12 +137,10 @@ report_df <- df %>%
          reference_sequence, 
          median_depth, mean_depth, 
          lineage, who_label, ambiguity_score, 
-         version, pangolin_version, 
-         pangoLEARN_version, pango_version, status, obfuscated_id)  %>%
-  rename(pangolin_status = status,
-         pangolin_ambiguity_score = ambiguity_score,
-         pangolin_des_version = version,
-         gisaid_sequence_id = obfuscated_id)
+         scorpio_call, scorpio_support, 
+	 version, pangolin_version, 
+         constellation_version, is_designated, qc_status, qc_notes, note, obfuscated_id)  %>%
+  rename(gisaid_sequence_id = obfuscated_id)
 
 
 # create the workbook

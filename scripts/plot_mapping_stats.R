@@ -1,6 +1,4 @@
 library (tidyverse)
-library (openxlsx)
-library (pdftools)
 
 # This script reads in a table of read-mapping statistics and generates plots
 #

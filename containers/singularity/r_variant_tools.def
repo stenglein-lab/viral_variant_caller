@@ -1,0 +1,44 @@
+BootStrap: docker
+From: rocker/r-ver:4.1.2
+
+%post
+    # This code is a stripped down derivative of the script from rocker, here:
+    # https://github.com/rocker-org/rocker-versioned2/blob/master/scripts/install_tidyverse.sh
+
+    ## build ARGs
+    NCPUS=`grep -c ^processor /proc/cpuinfo`
+
+    # install system packages necessary for tidyverse
+    set -e
+    apt-get update -qq && \
+        apt-get -y --no-install-recommends install \
+          libxml2-dev \
+          libcurl4-openssl-dev  \
+          curl \
+          libz-dev \
+          libpoppler-cpp-dev && \
+        rm -rf /var/lib/apt/lists/*
+
+          #libjpeg62-turbo-dev && \
+
+
+    # install tidyverse and associated packages
+    install2.r --error --skipinstalled -n $NCPUS \
+        tidyverse \
+        devtools
+
+    # other useful R packages
+    install2.r --error --skipmissing --skipinstalled -n $NCPUS \
+        openxlsx \
+        egg \
+        pheatmap \
+        pdftools \
+        DescTools \
+        jsonlite \
+        readxl 
+
+    rm -rf /tmp/downloaded_packages
+
+
+%labels
+    Author Mark Stenglein
