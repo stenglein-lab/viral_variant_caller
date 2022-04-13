@@ -12,9 +12,8 @@ if (!interactive()) {
   completeness_file = args[3]
   pangolin_file = args[4]
   minimum_fraction_called = args[5]
-  pango_synonyms_file = args[6]
-  output_prefix = args[7]
-  obfuscated_ids_file = args[8]
+  output_prefix = args[6]
+  obfuscated_ids_file = args[7]
   output_dir="./"
 } else {
   # if running via RStudio
@@ -23,7 +22,6 @@ if (!interactive()) {
   completeness_file = "../results/all_consensus_completeness.txt"
   pangolin_file = "../results/pangolin_lineage_report.csv"
   minimum_fraction_called = 0.95
-  pango_synonyms_file = "../results/lineage_synonyms.txt"
   output_prefix = paste0(Sys.Date(), "_")
   obfuscated_ids_file = "../results/obfuscated_sample_ids.txt"
   output_dir="../results/"
@@ -64,13 +62,9 @@ pangolin_df <- read.delim(pangolin_file, sep=",", header=T)
 # parse out N content from Pangolin
 pangolin_df$pangolin_fraction_N <-  as.numeric(str_match(pangolin_df$note, "N_content:([01].\\d+)")[,2])
 
-# mapping of pango -> WHO labels for variants
-pango_synonyms <- read.delim(pango_synonyms_file, sep="\t", header=T)
-
 # merge tables
 df <- left_join(completeness_df, depth_df)
 df <- left_join(df, pangolin_df, by=c("dataset" = "taxon"))
-df <- left_join(df, pango_synonyms, by=c("lineage" = "pango_lineage"))
 df <- left_join(df, obfuscated_ids, by=c("dataset" = "original_id"))
 
 # relationship between depth of coverage and fraction of genome called
@@ -136,7 +130,7 @@ report_df <- df %>%
   select(dataset, fraction_called, collection_date,
          reference_sequence, 
          median_depth, mean_depth, 
-         lineage, who_label, ambiguity_score, 
+         lineage, ambiguity_score, 
          scorpio_call, scorpio_support, 
 	 version, pangolin_version, 
          constellation_version, is_designated, qc_status, qc_notes, note, obfuscated_id)  %>%

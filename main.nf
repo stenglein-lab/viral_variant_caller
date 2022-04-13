@@ -1091,16 +1091,6 @@ process calculate_consensus_completeness {
   tuple path("*fraction_complete.txt"), path(consensus_fasta) into triage_consensus_ch
   tuple path("*fraction_complete.txt"), path(consensus_fasta) into triage_consensus_fail_ch
 
-  /*
-  shell:
-  def fraction_complete = 0
-  '''
-  fraction_complete=`!{params.script_dir}/determine_consensus_completeness.pl !{consensus_fasta}`
-  echo $fraction_complete  > "!{sample_id}_fraction_complete.txt"
-  echo $fraction_complete | awk '{ print "!{sample_id}" "\t" $0; }'  > "!{sample_id}_consensus_completeness.txt"
-  '''
-  */
-
   shell:
   '''
   !{params.script_dir}/determine_consensus_completeness.pl !{consensus_fasta} > !{sample_id}_fraction_complete.txt
@@ -1162,35 +1152,6 @@ process output_fasta_with_insufficient_coverage {
   script:
   """
   touch $consensus_fasta 
-  """
-}
-
-/*
-  This process outputs a tsv file that maps pango lineage IDs to WHO variant labels
-  For instance, B.1.1.529 (Pango) == Omicron (WHO)
-*/
-process tabulate_lineage_synonyms {
-  publishDir "${params.outdir}", mode:'link'                               
-
-  // singularity info for this process                                          
-  if (workflow.containerEngine == 'singularity') {                              
-      container "library://stenglein-lab/r_variant_tools/r_variant_tools:1.0.0"
-  } 
-
-  output:
-  path("lineage_synonyms.txt") into lineage_synonyms_ch
-
-  script:
-  """
-  # download the cov-lineages constellations repository, which contains info about 
-  # mapping pango lineage IDS -> WHO synonyms for variants
-  # e.g. B.A.1 == "omicron"
-  curl -OL https://github.com/cov-lineages/constellations/archive/refs/heads/main.zip
-  unzip main.zip 
-
-  # this R script will output a tsv file that maps pango lineages -> WHO names for variants
-  # if the organization of the cov-lineages repository changes it will fail...
-  Rscript ${params.script_dir}/tabulate_lineage_synonyms.R "./constellations-main/constellations/definitions/" > lineage_synonyms.txt
   """
 }
 
@@ -1333,7 +1294,6 @@ process report_on_datasets {
   path(consensus_completeness) from consensus_completeness_ch
   path(average_depth_xls) from average_depth_ch
   path(pangolin_lineage_report) from pangolin_report_ch
-  path(pango_lineage_synonyms) from lineage_synonyms_ch
   path(obfuscated_ids) from obfuscated_ids_report_ch
 
   output:
@@ -1343,7 +1303,7 @@ process report_on_datasets {
 
   script:
   """
-  Rscript ${params.script_dir}/report_on_datasets.R ${params.script_dir} $average_depth_xls $consensus_completeness $pangolin_lineage_report ${params.minimum_fraction_called} $pango_lineage_synonyms ${params.output_prefix} $obfuscated_ids
+  Rscript ${params.script_dir}/report_on_datasets.R ${params.script_dir} $average_depth_xls $consensus_completeness $pangolin_lineage_report ${params.minimum_fraction_called} ${params.output_prefix} $obfuscated_ids
   """
 }
 
