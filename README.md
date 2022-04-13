@@ -83,28 +83,6 @@ A step in this pipline removes host-derived reads.  By default it maps against t
 
 You will need an [existing bowtie2 index](http://bowtie-bio.sourceforge.net/bowtie2/manual.shtml#the-bowtie2-build-indexer) to exist for the pipeline to do host filtering.  In the above example, a bowtie2 index named GCRh38 exists in the directory `/home/databases/human/`.
 
-### Dependencies
-
-This pipeline depends on the scripts in this repository as well as the following tools:
-
-- [nextflow](https://www.nextflow.io/)
-- [lofreq](https://csb5.github.io/lofreq/)
-- [bwa](https://github.com/lh3/bwa)
-- [gatk](https://gatk.broadinstitute.org/hc/en-us)
-- [fastqc](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)
-- [multiqc](https://multiqc.info/)
-- [cutadapt](https://cutadapt.readthedocs.io/en/stable/)
-- [bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml)
-- [samtools](http://samtools.github.io/)
-- [R](https://www.r-project.org/)
-- [Pangolin](https://cov-lineages.org/resources/pangolin.html)
-
-These dependencies are handled via the conda environment [defined](./environment_setup/variant_conda_environment.yaml) in this repository.  To use this conda environment, you must run the pipeline with `-profile conda` specified.   The first time you run with this profile, the pipeline will create the environment and cache it in a directory named conda_cacheDir in your home directory.  You can override this cache location by changing this parameter defined in `nextflow.config`:
-
-```
-    conda.cacheDir         = "$HOME/conda_cacheDir"
-```
-
 ### Results
 
 The results of this pipeline will be output to a results subdirectory.  Results include:
