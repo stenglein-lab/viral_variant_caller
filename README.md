@@ -10,10 +10,18 @@ To download this pipeline, run:
 git clone -b cdphe_sequencing https://github.com/stenglein-lab/viral_variant_caller.git
 ```
 
+To clone this to a new directory (in this example named `new_analysis_dir`), run:
+
+```
+git clone -b cdphe_sequencing https://github.com/stenglein-lab/viral_variant_caller.git new_analysis_dir
+```
+
 
 ### Usage
 
-This pipeline has 2 ways to handle dependencies: (1) using singularity images, or (2) using conda environments.  Singularity is the preferred method.
+This pipeline has 2 ways to handle dependencies: 
+1. Using singularity images.  This is the preferred method.
+2. Using conda environments.  
 
 #### Singularity containers
   
@@ -37,7 +45,10 @@ This invocation:
 
 #### Conda environment
 
-The pipeline can also use an all-in-one conda environment.  This requires conda to be installed on your computer.  To test if conda is installed, run:
+
+The pipeline can also use an all-in-one conda environment.  This requires conda to be installed on your computer.  You should only use conda if Singularity is not an option. The issue is that you can run into problems with R using packages from a user-installed library location instead of packages in the conda environment.  See [here](https://github.com/conda-forge/r-base-feedstock/issues/37) for more info.  So use singularity if possible.
+
+To test if conda is installed, run:
 
 ```
 conda -V
