@@ -84,6 +84,5 @@ output_df <- cbind(sample_ids, obfuscated_ids)
 colnames(output_df) <- c("original_id", "obfuscated_id")
 
 # output tab-delimited table of old->new IDs
-# setting filename to "" writes to stdout
-write.table(output_df, "", quote=F, row.names=F, col.names=T, sep="\t")
+write.table(output_df, "obfuscated_sample_ids.txt", quote=F, row.names=F, col.names=T, sep="\t")
 

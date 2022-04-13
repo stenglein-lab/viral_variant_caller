@@ -13,16 +13,47 @@ git clone -b cdphe_sequencing https://github.com/stenglein-lab/viral_variant_cal
 
 ### Usage
 
-A typical invocation of the pipeline would be a command like:
+This pipeline has 2 ways to handle dependencies: (1) using singularity images, or (2) using conda environments.  Singularity is the preferred method.
+
+#### Singularity containers
+  
+The pipeline can use singularity containers to run programs like bowtie2 and bwa.  To use these containers you must be running the pipeline on a computer that has [singularity](https://sylabs.io/singularity) [installed](https://sylabs.io/guides/latest/admin-guide/installation.html).  To test if singularity is installed, run:
+
+```
+singularity --version
+```
+
+To run with singularity containers include the option `-profile singularity` in the nextflow command line, for instance:
+
+```
+nextflow run main.nf -resume -profile local,singularity --fastq_dir ../2022_3_1_run_4_fastq
+```
+Singularity containers will be automatically downloaded and stored in a directory named `singularity_cacheDir` in your home directory.  They will only be downloaded once.
+
+This invocation:
+- takes advantage of nextflow's built-in ability to resume pipelines (-resume flag)
+- specifies the local and singularity profiles, both specified in [nextflow.config](./nextflow.config)
+- points to the directory containing the fastq files that will be analyzed (--fastq_dir parameter)
+
+#### Conda environment
+
+The pipeline can also use an all-in-one conda environment.  This requires conda to be installed on your computer.  To test if conda is installed, run:
+
+```
+conda -V
+```
+
+The conda environments needed are defined in [yaml files in this directory](./environment_setup/) and will be automatically created if you run the pipeline using the conda profile.  To run the pipeline with conda, include `-profile conda` in the nextflow command line, for instance:
 
 ```
 nextflow run main.nf -resume -profile local,conda --fastq_dir ../2022_3_1_run_4_fastq
 ```
 
-This invocation:
-- takes advantage of nextflow's built-in ability to resume pipelines (-resume flag)
-- specifies the local and conda profiles, both specified in [nextflow.config](./nextflow.config)
-- points to the directory containing the fastq files that will be analyzed (--fastq_dir parameter)
+The conda environment will be created in a directory in your home directory named `conda_cacheDir` and will only be created once.
+
+You should specify either `-profile conda` or `-profile singularity` or the pipeline will output an error message and halt.  
+
+#### Running with screen
 
 [See here](https://github.com/stenglein-lab/taxonomy_pipeline/blob/master/docs/tutorial.md#section_screen) for an explanation of using the screen utility to avoid dropped connections and premature termination of a pipeline.
 

@@ -1,5 +1,5 @@
 #!/bin/bash 
  
-# analyze runs 1-5 datasets
+# analyze test datasets
 # MDS 3/23/2022
-nextflow run main.nf -resume -profile local,conda --fastq_dir ../runs_1_to_5_concatenated_fastq --key_file $HOME/.key.txt
+nextflow run main.nf -resume -profile local,singularity --fastq_dir ../test_fastq --key_file ../.key.txt
