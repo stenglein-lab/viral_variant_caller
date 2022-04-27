@@ -1221,6 +1221,7 @@ process update_pangolin_info {
 
   script:
   """
+  mkdir -p $params.pangolin_datadir
   pangolin --update-data --datadir $params.pangolin_datadir
   """
 }
