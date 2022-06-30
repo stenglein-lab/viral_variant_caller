@@ -983,9 +983,11 @@ process call_indels {
 
   lofreq index !{input_bam}.indelqual.bam
                                                                                 
-  lofreq call-parallel --pp-threads !{task.cpus} --no-default-filter --call-indels --only-indels -f !{params.refseq_fasta} !{input_bam}.indelqual.bam > !{input_bam}.indel.pre_vcf
+  lofreq call-parallel --pp-threads !{task.cpus} --no-default-filter --call-indels --only-indels -f !{params.refseq_fasta} !{input_bam}.indelqual.bam -o !{input_bam}.indel.pre_vcf.gz
                                                                                 
-  lofreq filter -v !{params.min_depth_for_variant_call} -V 0 -a !{params.min_allele_freq} -A 0 --no-defaults -i  !{input_bam}.indel.pre_vcf -o !{input_bam}.indel.vcf
+  lofreq filter -v !{params.min_depth_for_variant_call} -V 0 -a !{params.min_allele_freq} -A 0 --no-defaults -i  !{input_bam}.indel.pre_vcf.gz -o !{input_bam}.indel.vcf.gz
+  
+  gunzip !{input_bam}.indel.vcf.gz
   '''
 }
 
