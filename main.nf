@@ -1356,7 +1356,7 @@ process extract_annotated_variant_fields {
 
   // singularity info for this process                                          
   if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
-      container "https://depot.galaxyproject.org/singularity/snpeff:5.1--hdfd78af_1"
+      container "https://depot.galaxyproject.org/singularity/snpsift%3A4.3.1t--py36_0"
   } else {                                                                      
       container "quay.io/biocontainers/snpeff:5.1--hdfd78af_1"
   }      
