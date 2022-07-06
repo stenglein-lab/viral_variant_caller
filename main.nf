@@ -291,7 +291,7 @@ process trim_illumina_adapters_and_low_quality {
   // trim TruSeq-style cutadapt
   // see: https://cutadapt.readthedocs.io/en/stable/guide.html#illumina-truseq
   // def truseq_cutadapt = "-a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
-  def truseq_cutadapt = '-a "AGATCGGAAGAGC;min_overlap=8" -A "AGATCGGAAGAGC;min_overlap=8"'
+  def truseq_cutadapt = '-a "AGATCGGAAGAGC;min_overlap=3" -A "AGATCGGAAGAGC;min_overlap=3"'
 
   """
   cutadapt \
