@@ -22,7 +22,7 @@ def check_params_and_input () {
   // to exist.  Check that they exist and fail if not.
   checkPathParamList = [
     params.input_dir,
-    params.fastq_dir,
+    // params.fastq_dir,
     params.refseq_dir,
     params.script_dir,
     params.refseq_fasta,
@@ -40,11 +40,26 @@ def check_params_and_input () {
 */
 check_params_and_input()
 
+// possible multiple directories
+// if fastq are in multiple directories the directories
+// should be provided as a comma-separated list (no spaces)
+def fastq_dirs = params.fastq_dir.tokenize(',')
+
+// construct list of directories in which to find fastq
+fastq_dir_list = []
+for (dir in fastq_dirs){
+   def file_pattern = "${dir}/${params.fastq_pattern}"
+   fastq_dir_list.add(file_pattern)
+}
+
+
 /*
  These fastq files represent the main input to this workflow
 */
 Channel
-  .fromFilePairs("${params.fastq_dir}/${params.fastq_pattern}", size: -1, checkIfExists: true, maxDepth: 1)
+  // .fromFilePairs("${params.fastq_dir}/${params.fastq_pattern}", size: -1, checkIfExists: true, maxDepth: 1)
+  .fromFilePairs(fastq_dir_list, size: -1, checkIfExists: true, maxDepth: 1)
+
   // this map gets rid of any _S\d+ at the end of sample IDs but leaves fastq
   // names alone.  E.g. strip _S1 from the end of a sample ID..  
   // This is typically sample #s from Illumina basecalling.
