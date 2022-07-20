@@ -279,7 +279,7 @@ process initial_multiqc {
 */
 
 process trim_illumina_adapters_and_low_quality {
-  // publishDir "${params.post_trim_fastqc_dir}", mode:'link', pattern:"*.json"
+  publishDir "${params.fastq_out_dir}", mode:'link'
   label 'lowmem_threaded'                                                                
 
   // singularity info for this process                                          
@@ -306,7 +306,9 @@ process trim_illumina_adapters_and_low_quality {
   // trim TruSeq-style cutadapt
   // see: https://cutadapt.readthedocs.io/en/stable/guide.html#illumina-truseq
   // def truseq_cutadapt = "-a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
-  def truseq_cutadapt = '-a "AGATCGGAAGAGC;min_overlap=8" -A "AGATCGGAAGAGC;min_overlap=8"'
+  // def truseq_cutadapt = '-a "AGATCGGAAGAGC;min_overlap=8" -A "AGATCGGAAGAGC;min_overlap=8"'
+  // def truseq_cutadapt = '-a "AGATCGGAAGAGC" -A "AGATCGGAAGAGC"'
+  def truseq_cutadapt = '-a "AGATCGGAAGAGC;min_overlap=1" -A "AGATCGGAAGAGC;min_overlap=1"'
 
   """
   cutadapt \
@@ -328,7 +330,7 @@ process trim_illumina_adapters_and_low_quality {
  Use cutadapt to trim off PCR primers
 */
 process trim_PCR_primers {
-  publishDir "${params.post_trim_fastqc_dir}", mode:'link', pattern:"*.json"
+  publishDir "${params.fastq_out_dir}", mode:'link'
   label 'lowmem_threaded'                                                                
  
   // singularity info for this process                                          
@@ -345,26 +347,18 @@ process trim_PCR_primers {
   tuple val(sample_id), path("*_f.fastq") optional true into post_trim_qc_ch
   tuple val(sample_id), path("*_f.fastq") optional true into post_trim_ch
   tuple val(sample_id), path("*_f.fastq") optional true into post_trim_count_ch
-  path ("*cutadapt.json") 
+  // path ("*cutadapt.json") 
 
   script:
 
   // this handles paired-end data, in which case must specify a paired output file
   def paired_output   = initial_fastq[1] ? "-p ${sample_id}_R2_f.fastq" : ""
 
-  // fixed # of bases to trim
-  def paired_trimming = initial_fastq[1] ? "-U $params.always_trim_5p_bases -U -${params.always_trim_3p_bases}" : ""
-
   """
   cutadapt \
    -O 10 \
-   -a file:${params.primer_fasta_3p} \
-   -A file:${params.primer_fasta_3p} \
-   -g file:${params.primer_fasta_5p} \
-   -G file:${params.primer_fasta_5p} \
    -q 30,30 \
    --minimum-length ${params.post_trim_min_length} \
-   $paired_trimming \
    -o ${sample_id}_R1_f.fastq \
    --json=${sample_id}.cutadapt.json \
    --cores=${task.cpus} \
@@ -493,7 +487,7 @@ process host_filtering {
   --sensitive \
   --score-min "C,${params.host_bt_min_score},0" \
   -p ${task.cpus} \
-  $bowtie_file_output 2> "${sample_id}.host_filtering_bt.log" > /dev/null 
+  $bowtie_file_output > /dev/null 
   """
 }
 
@@ -597,6 +591,77 @@ process sort_refseq_aligned_bam {
   """
 }
 
+/*
+ Use iVar to soft-trim primer sites
+*/
+process ivar_trim {
+  label 'lowmem_non_threaded'                                                                
+  publishDir "${params.bam_out_dir}", mode:'link', pattern: "*.bam"             
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/ivar:1.3.1--hecb563c_3"
+  } else {                                                                      
+      container "quay.io/biocontainers/ivar:1.3.1--hecb563c_3"
+  }      
+
+  input:
+  tuple val(sample_id), path(bam) from post_bwa_align_ch
+
+  output:
+  tuple val(sample_id), path("${sample_id}.ivar_trim_unsorted.bam") into post_ivar_trim_ch
+
+  script:
+
+  // should we do ivar-trimming or not?
+  if (params.ivar_trim) {
+
+  // do ivar trimming - just pass bam through
+  // Usage: ivar trim -i <input.bam> -b <primers.bed> -p <prefix> [-m <min-length>] [-q <min-quality>] [-s <sliding-window-width>] 
+  """
+  ivar trim \
+    -i $bam \
+    -e \
+    -b $params.primer_bed \
+    -p "${sample_id}.ivar_trim_unsorted" \
+  """
+
+  } else {
+
+  // don't do ivar trimming - just pass bam through
+
+  """
+  ln $bam ${sample_id}.ivar_trim_unsorted.bam
+  """
+  }
+}
+
+/*
+ Sort ivar-trimmed bam (ivar doesn't output sorted bam)
+*/
+process sort_ivar_trimmed_bam {
+  label 'lowmem_threaded'                                                                
+
+  // singularity info for this process                                          
+  if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
+      container "https://depot.galaxyproject.org/singularity/samtools:1.14--hb421002_0"
+  } else {                                                                      
+      container "quay.io/biocontainers/samtools:1.14--hb421002_0"               
+  }     
+
+  input:
+  tuple val(sample_id), path(unsorted_bam) from post_ivar_trim_ch
+
+  output:
+  tuple val(sample_id), path("${sample_id}.ivar_trim.bam") into post_ivar_sort_ch
+
+  script:
+  """
+  samtools sort -@${task.cpus} -o ${sample_id}.ivar_trim.bam $unsorted_bam
+  """
+}
+
+
 /* 
   Count the # of mapped reads in the bam file and output to channel
   This is to avoid gatk crashing in case of empty bam files
@@ -612,7 +677,7 @@ process count_bam_records {
   }     
 
   input:
-  tuple val(sample_id), path(input_bam) from post_bwa_align_ch
+  tuple val(sample_id), path(input_bam) from post_ivar_sort_ch
 
   output:
   tuple env(bam_records), val(sample_id), path(input_bam) into post_bwa_count_ch
@@ -648,6 +713,9 @@ process apply_bsqr {
   input:
   // exclude bam with no mapped reads
   tuple env(bam_records), val(sample_id), path(input_bam) from post_bwa_count_ch.filter { Integer.parseInt(it[0]) > 0 }
+
+  output:
+  tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_ivar_ch
 
   output:
   tuple val(sample_id), path("${sample_id}.${params.refseq_name}.bam") into post_bsqr_snv_ch
@@ -998,7 +1066,7 @@ process call_indels {
 
   lofreq index !{input_bam}.indelqual.bam
                                                                                 
-  lofreq call-parallel --pp-threads !{task.cpus} --no-default-filter --call-indels --only-indels -f !{params.refseq_fasta} !{input_bam}.indelqual.bam > !{input_bam}.indel.pre_vcf
+  lofreq call-parallel --pp-threads !{task.cpus} --no-default-filter --call-indels --only-indels -f !{params.refseq_fasta} !{input_bam}.indelqual.bam -o !{input_bam}.indel.pre_vcf
                                                                                 
   lofreq filter -v !{params.min_depth_for_variant_call} -V 0 -a !{params.min_allele_freq} -A 0 --no-defaults -i  !{input_bam}.indel.pre_vcf -o !{input_bam}.indel.vcf
   '''
@@ -1369,9 +1437,9 @@ process extract_annotated_variant_fields {
 
   // singularity info for this process                                          
   if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
-      container "https://depot.galaxyproject.org/singularity/snpeff:5.1--hdfd78af_1"
+      container "https://depot.galaxyproject.org/singularity/snpsift:5.1--hdfd78af_0"
   } else {                                                                      
-      container "quay.io/biocontainers/snpeff:5.1--hdfd78af_1"
+      container "quay.io/biocontainers/snpsift:5.1--hdfd78af_0"
   }      
 
   input:
