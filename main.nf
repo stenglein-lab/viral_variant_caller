@@ -560,6 +560,7 @@ process bwa_align_to_refseq {
   rg=$(echo "@RG\\tID:$id\\tSM:$id"_"$sm\\tLB:$id"_"$sm\\tPL:ILLUMINA")
   
   bwa mem \
+  -L !{params.bwa_clipping_penalty} \
   -t !{params.refseq_bwa_threads} \
   -R $rg \
   !{params.refseq_fasta} !{input_fastq}  > !{sample_id}.unsorted.bam
@@ -621,6 +622,7 @@ process ivar_trim {
   """
   ivar trim \
     -i $bam \
+    -x $params.ivar_trim_offset \
     -e \
     -b $params.primer_bed \
     -p "${sample_id}.ivar_trim_unsorted" \
