@@ -1,5 +1,3 @@
 #!/bin/bash 
  
-# analyze test datasets
-# MDS 3/23/2022
-nextflow run main.nf -resume -profile local,singularity --fastq_dir ../test_fastq --key_file /home/cdphe_sequencing/.key.txt
+nextflow run main.nf -resume -profile local,singularity,aidlngs --call_variants $*
