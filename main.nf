@@ -1043,9 +1043,11 @@ process call_indels {
 
   lofreq index !{input_bam}.indelqual.bam
                                                                                 
-  lofreq call-parallel --pp-threads !{task.cpus} --no-default-filter --call-indels --only-indels -f !{params.refseq_fasta} !{input_bam}.indelqual.bam > !{input_bam}.indel.pre_vcf
+  lofreq call-parallel --pp-threads !{task.cpus} --no-default-filter --call-indels --only-indels -f !{params.refseq_fasta} !{input_bam}.indelqual.bam -o !{input_bam}.indel.pre_vcf.gz
                                                                                 
-  lofreq filter -v !{params.min_depth_for_variant_call} -V 0 -a !{params.min_allele_freq} -A 0 --no-defaults -i  !{input_bam}.indel.pre_vcf -o !{input_bam}.indel.vcf
+  lofreq filter -v !{params.min_depth_for_variant_call} -V 0 -a !{params.min_allele_freq} -A 0 --no-defaults -i  !{input_bam}.indel.pre_vcf.gz -o !{input_bam}.indel.vcf.gz
+  
+  gunzip !{input_bam}.indel.vcf.gz
   '''
 }
 
@@ -1414,7 +1416,7 @@ process extract_annotated_variant_fields {
 
   // singularity info for this process                                          
   if (workflow.containerEngine == 'singularity' && !params.singularity_pull_docker_container) {
-      container "https://depot.galaxyproject.org/singularity/snpeff:5.1--hdfd78af_1"
+      container "https://depot.galaxyproject.org/singularity/snpsift%3A4.3.1t--py36_0"
   } else {                                                                      
       container "quay.io/biocontainers/snpeff:5.1--hdfd78af_1"
   }      
